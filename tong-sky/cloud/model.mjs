@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-export const DELAY_MS=10000;
+export const DELAY_MS=4000;
 export const fields=['economyAward','premiumAward','prestigeAward','premiumUpgrade','prestigeUpgrade','firstCombined'];
 export const key=q=>`${q.origin}-${q.destination}-${q.month}`;
 export function kstDay(now=new Date()){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);}
