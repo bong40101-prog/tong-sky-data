@@ -52,7 +52,7 @@ jobs:
           path: tong-sky/cloud/data/
           retention-days: 7
   plan:
-    if: github.event_name == 'schedule' || inputs.mode == 'full'
+    if: (github.event_name == 'schedule' || inputs.mode == 'full') && vars.TONG_SKY_COLLECTION_ENABLED == 'true'
     needs: verify
     runs-on: ubuntu-latest
     outputs:

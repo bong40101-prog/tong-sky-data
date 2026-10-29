@@ -16,7 +16,7 @@ existing={e['path']:e['sha'] for e in api('/git/trees/'+tree+'?recursive=1')['tr
 for file in sorted(root.rglob('*.json')):
  # Generated data only; never publish source trees, tokens, logs or signing files.
  relative=file.relative_to(root).as_posix()
- if relative.split('/')[0] not in ('snapshots','regions','errors','shards'):raise RuntimeError('Unexpected generated-data path')
+ if relative.split('/')[0] not in ('snapshots','regions','errors','shards','bundles'):raise RuntimeError('Unexpected generated-data path')
  content=file.read_bytes();blob=hashlib.sha1(b'blob '+str(len(content)).encode()+b'\x00'+content).hexdigest()
  if existing.get('data/'+relative)==blob:continue
  entries.append({'path':'data/'+relative,'mode':'100644','type':'blob','content':content.decode('utf-8')})

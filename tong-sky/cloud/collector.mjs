@@ -1,4 +1,4 @@
-import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
 import {DELAY_MS,kstDay,plan,key,merge,read,write,progress} from './model.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url)),args=process.argv.slice(2),probe=args.includes('--probe');
 const catalog=read(path.join(here,'../src/main/assets/regions.json')),script=fs.readFileSync(path.join(here,'../src/main/assets/calendar.js'),'utf8');
@@ -9,15 +9,16 @@ let previous=read(statusFile),queries=probe?['CDG','SGN'].map(destination=>({ori
 if(!probe&&previous?.day===day&&previous.state==='completed'){console.log('Already collected this Korean calendar day');process.exit(0);}
 let state=!probe&&previous?.day===day?{...previous,state:'running',error:''}:{schema:1,origin,region,regionId,shard,day,startedAt:new Date().toISOString(),updatedAt:null,completedAt:null,state:'running',total:queries.length,completed:0,succeeded:0,failed:0,error:'',percent:0};
 if(state.total!==queries.length)throw Error('Plan changed during a resumable run');
-const published=()=>{state.percent=progress(state);state.updatedAt=new Date().toISOString();write(statusFile,state);aggregate();if(process.env.SKY_PUBLISH==='1'){const r=spawnSync('python3',[path.join(here,'publish.py'),root],{stdio:'inherit',env:process.env});if(r.status!==0)throw new Stop('Result publishing failed; stopping collection');}};
-function aggregate(){
+const published=(buildBundles=false)=>{state.percent=progress(state);state.updatedAt=new Date().toISOString();write(statusFile,state);aggregate(buildBundles);if(process.env.SKY_PUBLISH==='1'){const r=spawnSync('python3',[path.join(here,'publish.py'),root],{stdio:'inherit',env:process.env});if(r.status!==0)throw new Stop('Result publishing failed; stopping collection');}};
+function aggregate(buildBundles=false){
  const regionDir=path.join(root,'shards');for(const [name,id] of Object.entries(catalog.ids)){
   const shards=fs.existsSync(regionDir)?fs.readdirSync(regionDir).filter(f=>f.startsWith(id+'-')&&f.endsWith('.json')).map(f=>read(path.join(regionDir,f))).filter(s=>s.day===day):[];if(!shards.length)continue;
   const total=plan(origin,catalog.regions[name]).length,completed=shards.reduce((a,s)=>a+s.completed,0),succeeded=shards.reduce((a,s)=>a+s.succeeded,0),failed=shards.reduce((a,s)=>a+s.failed,0),stopped=shards.find(s=>s.state==='stopped');
-  write(path.join(root,'regions',id+'.json'),{schema:1,origin,region:name,day,total,completed,succeeded,failed,percent:progress({completed,total}),state:stopped?'stopped':completed===total?failed?'partial':'completed':'running',error:stopped?.error||'',updatedAt:new Date().toISOString(),completedAt:completed===total?new Date().toISOString():null});
+  let bundleVersion=read(path.join(root,'regions',id+'.json'))?.bundleVersion||null;if(buildBundles){const records=plan(origin,catalog.regions[name]).map(q=>read(path.join(root,'snapshots',key(q)+'.json'))).filter(Boolean);if(records.length){bundleVersion=createHash('sha256').update(JSON.stringify(records)).digest('hex');write(path.join(root,'bundles',id+'.json'),{schema:1,origin,region:name,bundleVersion,records});}}
+  write(path.join(root,'regions',id+'.json'),{bundleVersion,schema:1,origin,region:name,day,total,completed,succeeded,failed,percent:progress({completed,total}),state:stopped?'stopped':completed===total?failed?'partial':'completed':'running',error:stopped?.error||'',updatedAt:new Date().toISOString(),completedAt:completed===total?new Date().toISOString():null});
  }
 }
-let lastPublish=0;function checkpoint(force=false){state.percent=progress(state);state.updatedAt=new Date().toISOString();write(statusFile,state);if(force||Date.now()-lastPublish>60000){published();lastPublish=Date.now();}}
+let lastPublish=0;function checkpoint(force=false){state.percent=progress(state);state.updatedAt=new Date().toISOString();write(statusFile,state);if(force||Date.now()-lastPublish>60000){published(force);lastPublish=Date.now();}}
 const {chromium}=await import('playwright');const browser=await chromium.launch({headless:process.env.SKY_HEADED!=='1'});const context=await browser.newContext({locale:'ko-KR',viewport:{width:1280,height:900}});const page=await context.newPage();let blocked='',deniedResponse=null,deniedBody=Promise.resolve();
 page.on('response',r=>{try{const h=new URL(r.url()).hostname;if((h==='koreanair.com'||h.endsWith('.koreanair.com'))&&[401,403,429].includes(r.status())){blocked='Official site access restriction HTTP '+r.status()+' '+r.url();deniedResponse={status:r.status(),url:r.url(),body:''};deniedBody=r.text().then(t=>{deniedResponse.body=t.slice(0,1800);}).catch(()=>{});}}catch{}});
 page.on('crash',()=>{blocked='Browser renderer crashed';});
