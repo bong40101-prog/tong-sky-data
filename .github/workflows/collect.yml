@@ -1,7 +1,6 @@
 name: TongSKY daily public award calendar
 on:
-  schedule:
-    - cron: '1 0 * * *'
+  # Automatic collection paused at the user's request. Manual runs remain available.
   push:
     branches: [main]
     paths: ['tong-sky/cloud/**', 'tong-sky/src/main/assets/**', '.github/workflows/collect.yml']
@@ -28,7 +27,7 @@ jobs:
           node-version: '24'
       - run: node --test tong-sky/cloud/test.mjs
   probe:
-    if: (github.event_name == 'push' && contains(github.event.head_commit.message, '[live-check]')) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'probe')
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'probe'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -52,7 +51,7 @@ jobs:
           path: tong-sky/cloud/data/
           retention-days: 7
   plan:
-    if: (github.event_name == 'schedule' || inputs.mode == 'full') && vars.TONG_SKY_COLLECTION_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'full' && vars.TONG_SKY_COLLECTION_ENABLED == 'true'
     needs: verify
     runs-on: ubuntu-latest
     outputs:
