@@ -1,0 +1,529 @@
+{
+  "source": "https://www.koreanair.com/booking/book-and-manage/award-seat-availability",
+  "observedAt": "2026-10-29",
+  "notice": "공식 지역과 도시 선택의 대한항공 취항지 목록. 출발 공항별 직항 운항 또는 전 기간 운항을 보장하지 않음.",
+  "regions": {
+    "미주": [
+      {
+        "code": "JFK",
+        "name": "뉴욕/존 F. 케네디"
+      },
+      {
+        "code": "DFW",
+        "name": "댈러스/포트워스"
+      },
+      {
+        "code": "LAS",
+        "name": "라스베이거스"
+      },
+      {
+        "code": "LAX",
+        "name": "로스앤젤레스"
+      },
+      {
+        "code": "YVR",
+        "name": "밴쿠버"
+      },
+      {
+        "code": "BOS",
+        "name": "보스턴"
+      },
+      {
+        "code": "SFO",
+        "name": "샌프란시스코"
+      },
+      {
+        "code": "SEA",
+        "name": "시애틀"
+      },
+      {
+        "code": "ORD",
+        "name": "시카고"
+      },
+      {
+        "code": "ATL",
+        "name": "애틀랜타"
+      },
+      {
+        "code": "IAD",
+        "name": "워싱턴/덜레스"
+      },
+      {
+        "code": "YYZ",
+        "name": "토론토"
+      },
+      {
+        "code": "HNL",
+        "name": "호놀룰루"
+      }
+    ],
+    "유럽": [
+      {
+        "code": "LHR",
+        "name": "런던"
+      },
+      {
+        "code": "FCO",
+        "name": "로마"
+      },
+      {
+        "code": "LIS",
+        "name": "리스본"
+      },
+      {
+        "code": "MAD",
+        "name": "마드리드"
+      },
+      {
+        "code": "MXP",
+        "name": "밀라노"
+      },
+      {
+        "code": "BUD",
+        "name": "부다페스트"
+      },
+      {
+        "code": "VIE",
+        "name": "비엔나"
+      },
+      {
+        "code": "AMS",
+        "name": "암스테르담"
+      },
+      {
+        "code": "IST",
+        "name": "이스탄불"
+      },
+      {
+        "code": "ZRH",
+        "name": "취리히"
+      },
+      {
+        "code": "CDG",
+        "name": "파리"
+      },
+      {
+        "code": "PRG",
+        "name": "프라하"
+      },
+      {
+        "code": "FRA",
+        "name": "프랑크푸르트"
+      }
+    ],
+    "동북아시아": [
+      {
+        "code": "KOJ",
+        "name": "가고시마"
+      },
+      {
+        "code": "KMQ",
+        "name": "고마쓰"
+      },
+      {
+        "code": "UKB",
+        "name": "고베"
+      },
+      {
+        "code": "CAN",
+        "name": "광저우"
+      },
+      {
+        "code": "KMJ",
+        "name": "구마모토"
+      },
+      {
+        "code": "KKJ",
+        "name": "기타큐슈"
+      },
+      {
+        "code": "NGS",
+        "name": "나가사키"
+      },
+      {
+        "code": "NGO",
+        "name": "나고야"
+      },
+      {
+        "code": "NKG",
+        "name": "난징"
+      },
+      {
+        "code": "KIJ",
+        "name": "니가타"
+      },
+      {
+        "code": "NGB",
+        "name": "닝보"
+      },
+      {
+        "code": "DLC",
+        "name": "다롄"
+      },
+      {
+        "code": "TAK",
+        "name": "다카마쓰"
+      },
+      {
+        "code": "NRT",
+        "name": "도쿄/나리타"
+      },
+      {
+        "code": "HND",
+        "name": "도쿄/하네다"
+      },
+      {
+        "code": "MFM",
+        "name": "마카오"
+      },
+      {
+        "code": "SHI",
+        "name": "미야코지마"
+      },
+      {
+        "code": "PEK",
+        "name": "베이징"
+      },
+      {
+        "code": "CTS",
+        "name": "삿포로"
+      },
+      {
+        "code": "PVG",
+        "name": "상하이/푸동"
+      },
+      {
+        "code": "SHA",
+        "name": "상하이/홍차오"
+      },
+      {
+        "code": "XMN",
+        "name": "샤먼"
+      },
+      {
+        "code": "SHE",
+        "name": "선양"
+      },
+      {
+        "code": "SZX",
+        "name": "선전"
+      },
+      {
+        "code": "XIY",
+        "name": "시안"
+      },
+      {
+        "code": "AOJ",
+        "name": "아오모리"
+      },
+      {
+        "code": "YNJ",
+        "name": "옌지"
+      },
+      {
+        "code": "KIX",
+        "name": "오사카"
+      },
+      {
+        "code": "OIT",
+        "name": "오이타"
+      },
+      {
+        "code": "OKJ",
+        "name": "오카야마"
+      },
+      {
+        "code": "OKA",
+        "name": "오키나와"
+      },
+      {
+        "code": "URC",
+        "name": "우루무치"
+      },
+      {
+        "code": "WUX",
+        "name": "우시"
+      },
+      {
+        "code": "WUH",
+        "name": "우한"
+      },
+      {
+        "code": "WEH",
+        "name": "웨이하이"
+      },
+      {
+        "code": "ISG",
+        "name": "이시가키"
+      },
+      {
+        "code": "DYG",
+        "name": "장자제"
+      },
+      {
+        "code": "CGO",
+        "name": "정저우"
+      },
+      {
+        "code": "CSX",
+        "name": "창사"
+      },
+      {
+        "code": "TAO",
+        "name": "칭다오"
+      },
+      {
+        "code": "KMG",
+        "name": "쿤밍"
+      },
+      {
+        "code": "TPE",
+        "name": "타이베이"
+      },
+      {
+        "code": "RMQ",
+        "name": "타이중"
+      },
+      {
+        "code": "TSN",
+        "name": "톈진"
+      },
+      {
+        "code": "FOC",
+        "name": "푸저우"
+      },
+      {
+        "code": "HGH",
+        "name": "항저우"
+      },
+      {
+        "code": "HFE",
+        "name": "허페이"
+      },
+      {
+        "code": "HKG",
+        "name": "홍콩"
+      },
+      {
+        "code": "FUK",
+        "name": "후쿠오카"
+      },
+      {
+        "code": "HIJ",
+        "name": "히로시마"
+      }
+    ],
+    "동남아시아/서남아시아": [
+      {
+        "code": "CXR",
+        "name": "나트랑"
+      },
+      {
+        "code": "DAD",
+        "name": "다낭"
+      },
+      {
+        "code": "DPS",
+        "name": "발리"
+      },
+      {
+        "code": "DEL",
+        "name": "델리"
+      },
+      {
+        "code": "MNL",
+        "name": "마닐라"
+      },
+      {
+        "code": "BKK",
+        "name": "방콕"
+      },
+      {
+        "code": "TAG",
+        "name": "보홀"
+      },
+      {
+        "code": "CEB",
+        "name": "세부"
+      },
+      {
+        "code": "SIN",
+        "name": "싱가포르"
+      },
+      {
+        "code": "RGN",
+        "name": "양곤"
+      },
+      {
+        "code": "CGK",
+        "name": "자카르타"
+      },
+      {
+        "code": "CNX",
+        "name": "치앙마이"
+      },
+      {
+        "code": "KTM",
+        "name": "카트만두"
+      },
+      {
+        "code": "BKI",
+        "name": "코타키나발루"
+      },
+      {
+        "code": "CMB",
+        "name": "콜롬보"
+      },
+      {
+        "code": "KUL",
+        "name": "쿠알라룸푸르"
+      },
+      {
+        "code": "CRK",
+        "name": "클락"
+      },
+      {
+        "code": "HKT",
+        "name": "푸껫"
+      },
+      {
+        "code": "PQC",
+        "name": "푸꾸옥"
+      },
+      {
+        "code": "KTI",
+        "name": "프놈펜"
+      },
+      {
+        "code": "HAN",
+        "name": "하노이"
+      },
+      {
+        "code": "SGN",
+        "name": "호찌민"
+      }
+    ],
+    "대양주/괌": [
+      {
+        "code": "GUM",
+        "name": "괌"
+      },
+      {
+        "code": "MEL",
+        "name": "멜버른"
+      },
+      {
+        "code": "BNE",
+        "name": "브리즈번"
+      },
+      {
+        "code": "SYD",
+        "name": "시드니"
+      },
+      {
+        "code": "AKL",
+        "name": "오클랜드"
+      }
+    ],
+    "러시아/몽골/중앙아시아": [
+      {
+        "code": "SVO",
+        "name": "모스크바"
+      },
+      {
+        "code": "VVO",
+        "name": "블라디보스토크"
+      },
+      {
+        "code": "LED",
+        "name": "상트페테르부르크"
+      },
+      {
+        "code": "ALA",
+        "name": "알마티"
+      },
+      {
+        "code": "UBN",
+        "name": "울란바타르"
+      },
+      {
+        "code": "IKT",
+        "name": "이르쿠츠크"
+      }
+    ],
+    "중동/아프리카": [
+      {
+        "code": "DXB",
+        "name": "두바이"
+      },
+      {
+        "code": "TLV",
+        "name": "텔아비브"
+      }
+    ],
+    "대한민국": [
+      {
+        "code": "ICN",
+        "name": "서울/인천"
+      },
+      {
+        "code": "GMP",
+        "name": "서울/김포"
+      },
+      {
+        "code": "PUS",
+        "name": "부산/김해"
+      },
+      {
+        "code": "CJU",
+        "name": "제주"
+      },
+      {
+        "code": "KWJ",
+        "name": "광주"
+      },
+      {
+        "code": "KUV",
+        "name": "군산"
+      },
+      {
+        "code": "TAE",
+        "name": "대구"
+      },
+      {
+        "code": "RSU",
+        "name": "여수/순천"
+      },
+      {
+        "code": "USN",
+        "name": "울산"
+      },
+      {
+        "code": "WJU",
+        "name": "원주"
+      },
+      {
+        "code": "HIN",
+        "name": "진주/사천"
+      },
+      {
+        "code": "CJJ",
+        "name": "청주"
+      },
+      {
+        "code": "KPO",
+        "name": "포항/경주"
+      }
+    ]
+  },
+  "ids": {
+    "미주": "americas",
+    "유럽": "europe",
+    "동북아시아": "east_asia",
+    "동남아시아/서남아시아": "se_asia",
+    "대양주/괌": "oceania",
+    "러시아/몽골/중앙아시아": "central_asia",
+    "중동/아프리카": "middle_east_africa",
+    "대한민국": "korea"
+  }
+}

@@ -1,0 +1,105 @@
+name: TongSKY daily public award calendar
+on:
+  schedule:
+    - cron: '1 0 * * *'
+  push:
+    branches: [main]
+    paths: ['tong-sky/cloud/**', 'tong-sky/src/main/assets/**', '.github/workflows/collect.yml']
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'probe: two real queries; full: collect all regions'
+        type: choice
+        options: [full, probe]
+        default: full
+permissions:
+  contents: read
+concurrency:
+  group: tong-sky-${{ github.event_name == 'push' && 'probe' || 'daily' }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: node --test tong-sky/cloud/test.mjs
+  probe:
+    if: github.event_name == 'push' || inputs.mode == 'probe'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - working-directory: tong-sky/cloud
+        run: |
+          npm install --ignore-scripts
+          npx playwright install --with-deps chromium
+      - working-directory: tong-sky/cloud
+        env:
+          SKY_HEADED: '1'
+        run: xvfb-run --auto-servernum node collector.mjs --probe
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: real-query-proof
+          path: tong-sky/cloud/data/
+          retention-days: 7
+  plan:
+    if: github.event_name == 'schedule' || inputs.mode == 'full'
+    needs: verify
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - id: plan
+        run: echo "matrix=$(node tong-sky/cloud/plan.mjs)" >> "$GITHUB_OUTPUT"
+  collect:
+    needs: plan
+    permissions:
+      contents: write
+    strategy:
+      max-parallel: 1
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Restore last successful calendars and checkpoints
+        run: |
+          mkdir -p tong-sky/cloud/data
+          if git ls-remote --exit-code --heads origin tong-sky-data >/dev/null 2>&1; then
+            git fetch --depth=1 origin tong-sky-data
+            if git cat-file -e FETCH_HEAD:data 2>/dev/null; then
+              git archive FETCH_HEAD data | tar -x -C tong-sky/cloud
+            fi
+          fi
+      - working-directory: tong-sky/cloud
+        run: |
+          npm install --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Collect public monthly calendars sequentially
+        working-directory: tong-sky/cloud
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKY_PUBLISH: '1'
+          SKY_HEADED: '1'
+          SKY_ORIGIN: ICN
+          SKY_REGION: ${{ matrix.region }}
+          SKY_SHARD: ${{ matrix.shard }}
+          SKY_CODES_JSON: ${{ matrix.codes }}
+        run: xvfb-run --auto-servernum node collector.mjs
