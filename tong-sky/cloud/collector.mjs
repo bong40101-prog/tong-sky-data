@@ -19,7 +19,7 @@ function aggregate(){
 }
 let lastPublish=0;function checkpoint(force=false){state.percent=progress(state);state.updatedAt=new Date().toISOString();write(statusFile,state);if(force||Date.now()-lastPublish>60000){published();lastPublish=Date.now();}}
 const {chromium}=await import('playwright');const browser=await chromium.launch({headless:process.env.SKY_HEADED!=='1'});const context=await browser.newContext({locale:'ko-KR',viewport:{width:1280,height:900}});const page=await context.newPage();let blocked='';
-page.on('response',r=>{try{const h=new URL(r.url()).hostname;if((h==='koreanair.com'||h.endsWith('.koreanair.com'))&&[401,403,429].includes(r.status()))blocked='Official site access restriction HTTP '+r.status();}catch{}});
+page.on('response',r=>{try{const h=new URL(r.url()).hostname;if((h==='koreanair.com'||h.endsWith('.koreanair.com'))&&[401,403,429].includes(r.status()))blocked='Official site access restriction HTTP '+r.status()+' '+r.url();}catch{}});
 page.on('crash',()=>{blocked='Browser renderer crashed';});
 async function lookup(q){
  if(blocked)throw new Stop(blocked);let stage='consent',stageAt=Date.now(),started=Date.now();await page.goto(source,{waitUntil:'domcontentloaded',timeout:60000});
@@ -43,4 +43,4 @@ try{
   state.completed=i+1;checkpoint();if(i+1<queries.length)await sleep(DELAY_MS);
  }
  state.state=state.failed?'partial':'completed';state.completedAt=new Date().toISOString();checkpoint(true);if(probe&&state.succeeded!==queries.length)throw Error('Live probe failed');
-}catch(e){state.state='stopped';state.error=e.message;checkpoint(true);console.error(e.message);process.exitCode=1;}finally{await browser.close();}
+}catch(e){state.state='stopped';state.error=e.message;state.evidence={url:page.url(),title:await page.title().catch(()=>''),text:await page.locator('body').innerText({timeout:2000}).catch(()=>'')};state.evidence.text=state.evidence.text.slice(0,1800);checkpoint(true);console.error(e.message);process.exitCode=1;}finally{await browser.close();}
