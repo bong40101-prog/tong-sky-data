@@ -1,0 +1,8 @@
+{
+  "name": "tongsky-anonymous-public-reader",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": { "test": "node --test *.test.mjs" },
+  "engines": { "node": ">=22" }
+}

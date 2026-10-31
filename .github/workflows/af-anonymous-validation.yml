@@ -1,0 +1,37 @@
+name: Anonymous public source tests
+on:
+  push:
+    branches: [audit/af-anonymous-20261031]
+permissions: {}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      AUDIT_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - name: Fetch exact test code
+        run: |
+          git init harness
+          git -C harness remote add origin https://github.com/bong40101-prog/tong-sky-data.git
+          git -C harness fetch --depth 1 origin "$AUDIT_COMMIT"
+          git -C harness checkout --detach FETCH_HEAD
+      - name: Offline tests and recorded public responses
+        working-directory: harness/anonymous-public-source
+        run: node --test
+      - name: Syntax checks
+        working-directory: harness/anonymous-public-source
+        run: |
+          python - <<'PY'
+          import pathlib, subprocess
+          for file in sorted(pathlib.Path(".").glob("*.mjs")):
+              subprocess.run(["node", "--check", str(file)], check=True)
+          PY
+      - name: Scope
+        run: |
+          echo "No live provider calls are made by this workflow."
+          echo "Recorded anonymous search and quota responses are checked without credentials."

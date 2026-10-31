@@ -1,0 +1,58 @@
+{
+  "provider": "award-flight-daily",
+  "authentication": "none",
+  "query": {
+    "origin": "ICN",
+    "destinations": [
+      "CDG",
+      "AMS"
+    ],
+    "dateFrom": "2026-11-01",
+    "dateTo": "2027-09-30",
+    "cabin": "J",
+    "source": "flyingblue",
+    "directOnly": true,
+    "limit": 200,
+    "minSeats": 1,
+    "offset": 0
+  },
+  "fetchedAt": "2026-10-31T08:52:58.415Z",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "⚠️ Access denied: Free tier limit reached (10/day). Add an API key for higher limits."
+      }
+    ],
+    "structuredContent": {
+      "result": "⚠️ Access denied: Free tier limit reached (10/day). Add an API key for higher limits."
+    },
+    "isError": false
+  },
+  "trace": [
+    {
+      "method": "initialize",
+      "status": 200,
+      "authentication": "none",
+      "memberCookies": false
+    },
+    {
+      "method": "notifications/initialized",
+      "status": 202,
+      "authentication": "none",
+      "memberCookies": false
+    },
+    {
+      "method": "tools/list",
+      "status": 200,
+      "authentication": "none",
+      "memberCookies": false
+    },
+    {
+      "method": "tools/call",
+      "status": 200,
+      "authentication": "none",
+      "memberCookies": false
+    }
+  ]
+}
