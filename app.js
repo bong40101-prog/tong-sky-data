@@ -1,5 +1,5 @@
 import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor} from './model.js';
-import {loadSavedDataset} from './data.js';
+import {loadSavedDataset,retainUnavailableRegions} from './data.js';
 const $=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const today=todayKST();
@@ -96,8 +96,8 @@ async function loadData(force=false){
  const id=++generation;controller?.abort();controller=new AbortController();const own=controller,carrier=state.carrier,origin=state.origin,key=`${carrier}:${origin}`;state.loading=true;state.selected=null;state.records=[];state.routes=[];message('');status('저장 자료 불러오는 중');$('refresh').disabled=true;stats();renderRoutes();renderCalendar();
  const cached=cache.get(key);if(!force&&cached&&Date.now()-cached.at<60000){finishData(cached.records,cached.errors);return;}
  const timer=setTimeout(()=>own.abort(new Error('연결 시간 초과')),25000);
- try{const data=await loadSavedDataset({catalogs,carriers:[carrier],origin,signal:own.signal,force,onProgress:p=>{if(id===generation)status(`저장 자료 ${p.completed}/${p.total} 불러오는 중`);}});if(id===generation){const result=data.results[carrier];cache.set(key,{...result,at:Date.now()});finishData(result.records,result.errors);}}
- catch{if(id===generation)finishData([],['저장 자료 연결 실패']);}finally{clearTimeout(timer);}
+ try{const data=await loadSavedDataset({catalogs,carriers:[carrier],origin,signal:own.signal,force,onProgress:p=>{if(id===generation)status(`저장 자료 ${p.completed}/${p.total} 불러오는 중`);}});if(id===generation){const result=retainUnavailableRegions(data.results[carrier],cached?.records);cache.set(key,{...result,at:Date.now()});finishData(result.records,result.errors);}}
+ catch{if(id===generation)finishData(cached?.records??[],['저장 자료 연결 실패']);}finally{clearTimeout(timer);}
 }
 async function revealMain(){await loadData();$('boot-screen').hidden=true;$('app-screen').hidden=false;}
 async function bootDatasets(force=false){
@@ -105,7 +105,7 @@ async function bootDatasets(force=false){
  const timer=setTimeout(()=>own.abort(new Error('연결 시간 초과')),25000);
  try{const data=await loadSavedDataset({catalogs,carriers:['KE','OZ'],origin:state.origin,signal:own.signal,force,onProgress:p=>{if(attempt!==bootAttempt)return;const percent=Math.floor(p.completed*100/p.total);$('boot-progress').value=percent;$('boot-percent').textContent=percent+'%';$('boot-stage').textContent=AIRLINES[p.source.carrier].name+' · '+p.source.region;$('boot-detail').textContent=`${p.completed}/${p.total}개 저장 자료 불러오기 완료`;}});
   if(attempt!==bootAttempt)return;
-  for(const [carrier,result] of Object.entries(data.results))cache.set(`${carrier}:${state.origin}`,{...result,at:Date.now()});
+  for(const [carrier,result] of Object.entries(data.results)){const key=`${carrier}:${state.origin}`,merged=retainUnavailableRegions(result,cache.get(key)?.records);data.results[carrier]=merged;cache.set(key,{...merged,at:Date.now()});}
   const total=Object.values(data.results).reduce((n,r)=>n+r.records.length,0),failed=Object.values(data.results).some(r=>r.errors.length>0);
   if(failed){$('boot-stage').textContent='일부 자료 연결을 확인하지 못했습니다.';$('boot-detail').textContent=`불러온 ${total}개 노선·월은 유지됩니다. 다시 시도하거나 불러온 자료로 볼 수 있습니다.`;$('boot-actions').hidden=false;}
   else{$('boot-progress').value=100;$('boot-percent').textContent='100%';$('boot-stage').textContent='저장 자료 불러오기 완료';$('boot-detail').textContent=`${total}개 노선·월 · 메인 화면으로 이동합니다.`;await revealMain();}
