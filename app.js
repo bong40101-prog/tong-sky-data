@@ -119,6 +119,10 @@ async function selectCarrier(carrier){if(state.carrier===carrier)return;state.ca
  for(const button of document.querySelectorAll('[data-carrier]')){const active=button.dataset.carrier===carrier;button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;}
  state.end=carrier==='KE'&&today<='2026-12-17'?'2026-12-17':addDays(today,359);$('end').value=state.end;if(state.start>state.end){state.start=today;$('start').value=today;}setOptions();setMonths();await loadData();}
 async function init(){
+ // Official lookup is independent of the saved KE/OZ dataset and never starts collection.
+ $('vn-lookup').addEventListener('click',()=>$('vn-dialog').showModal());
+ $('vn-dialog').addEventListener('close',()=>$('vn-lookup').focus());
+ $('vn-dialog').addEventListener('click',e=>{if(e.target===$('vn-dialog')){const r=$('vn-dialog').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('vn-dialog').close();}});
  $('boot-retry').addEventListener('click',()=>catalogs?bootDatasets(true):location.reload());$('boot-continue').addEventListener('click',()=>revealMain());
  catalogs=await fetch('./catalog.json?v=2',{cache:'no-cache'}).then(response=>{if(!response.ok)throw new Error();return response.json();});
  const airports=new Map();for(const catalog of Object.values(catalogs))for(const cities of Object.values(catalog.regions))for(const city of cities)airports.set(city.code,city.name);for(const [code,name] of [...airports].sort()){const option=node('option','');option.value=code;option.label=name;$('airport-options').append(option);}
