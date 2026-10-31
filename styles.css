@@ -82,3 +82,5 @@ body[data-carrier="OZ"] .month-type-counts{grid-template-columns:repeat(2,minmax
 .route-current-calendar .type-count-row strong{font-size:10px}
 .route-current-calendar .type-name::before{width:4px;height:4px;margin-right:4px}
 @media(max-width:760px){.route-card{min-width:290px;width:290px}.total-count-head,.total-count-row{grid-template-columns:minmax(0,1fr) 47px 47px}}
+
+.visitor-footer{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:8px 14px;padding:4px 18px 28px;color:#6e8294;font-size:11px;text-align:center}.visitor-footer strong{font-size:12px;font-weight:650;color:#42627d}
