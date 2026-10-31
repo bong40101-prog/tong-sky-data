@@ -1,0 +1,21 @@
+{
+  "checkedAt": "2026-10-31",
+  "source": "https://www.koreanair.com/api/et/route/c/a/getReservationAirport?airportCode=ICN&directionType=A&flowType=RE&langCode=KO&nationCode=KR&tripType=RO",
+  "fields": [
+    "airportCode",
+    "countryCode",
+    "countryName"
+  ],
+  "normalisedDisplayNames": {
+    "CN": "중국",
+    "HK": "홍콩",
+    "MO": "마카오",
+    "AE": "아랍에미리트"
+  },
+  "staticAirportMappings": {
+    "ICN": "KR",
+    "NGB": "CN",
+    "WUX": "CN"
+  },
+  "scope": "Airport country/territory classification only; not an operating-flight or seat-availability rule."
+}
