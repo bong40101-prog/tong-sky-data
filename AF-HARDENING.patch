@@ -1,0 +1,3128 @@
+diff --git a/server/af/auth-login.ts b/server/af/auth-login.ts
+index 071ab2d135b683d72e0445d840da7cd3f2d076ad..4313108be42b2fcb0bc53f9ab59e6898a268c693 100644
+--- a/server/af/auth-login.ts
++++ b/server/af/auth-login.ts
+@@ -5,7 +5,9 @@ import {
+   COLLECTOR_PAGE,
+   SEARCH_CUSTOMER_HASH,
+ } from './hashes.js'
++import { invalidateQueryCaches } from './explore-cache.js'
+ import { FlyingBlueAuthError } from './hashcash.js'
++import { AirFranceResponseError } from './response-validation.js'
+ import { postGraphQl } from './transport.js'
+ import type { SearchCustomerPayload } from './types.js'
+ 
+@@ -29,6 +31,7 @@ const restoreCollectorPage = async (page: Page): Promise<void> => {
+ }
+ 
+ export const openFlyingBlueLoginOnPage = async (page: Page): Promise<string> => {
++  invalidateQueryCaches()
+   await page.bringToFront().catch(() => undefined)
+   await navigateAirFrance(page, FLYING_BLUE_LOGIN_URL, 1_200)
+   await page.bringToFront().catch(() => undefined)
+@@ -36,23 +39,27 @@ export const openFlyingBlueLoginOnPage = async (page: Page): Promise<string> =>
+ }
+ 
+ /** Open (or focus) Chrome on the Air France login page for Flying Blue. */
+-export const openFlyingBlueLogin = async (): Promise<{ url: string }> => withTransportLock(async () => (
+-  withRecoveredCollector(async (page) => ({ url: await openFlyingBlueLoginOnPage(page) }))
+-))
++export const openFlyingBlueLogin = async (): Promise<{ url: string }> => withTransportLock(async () => {
++  invalidateQueryCaches()
++  return withRecoveredCollector(async (page) => ({ url: await openFlyingBlueLoginOnPage(page) }))
++})
+ 
+-export const isFlyingBlueAuthenticated = async (): Promise<boolean> => withTransportLock(async () => (
+-  withRecoveredCollector(async (page) => {
++const isAuthenticationFailure = (error: unknown): boolean => error instanceof FlyingBlueAuthError
++  || (error instanceof AirFranceResponseError
++    && (error.status === 401 || /^(UNAUTHENTICATED|UNAUTHORIZED)$/i.test(error.code ?? '')))
++
++export const isFlyingBlueAuthenticated = async (): Promise<boolean> => withTransportLock(async () => {
++  invalidateQueryCaches()
++  return withRecoveredCollector(async (page) => {
+     try {
+       await restoreCollectorPage(page)
+       return await probeCustomer(page)
+     } catch (error) {
+-      if (error instanceof FlyingBlueAuthError) return false
+-      const message = error instanceof Error ? error.message : String(error)
+-      if (/401|not authenticated|Flying Blue|CustomerAPI/i.test(message)) return false
++      if (isAuthenticationFailure(error)) return false
+       throw error
+     }
+   })
+-))
++})
+ 
+ /**
+  * After the user signs in inside Chrome, verify SearchCustomer and keep the
+@@ -62,8 +69,9 @@ export const confirmFlyingBlueSession = async (): Promise<{
+   authenticated: boolean
+   cookieCount: number
+   url: string
+-}> => withTransportLock(async () => (
+-  withRecoveredCollector(async (page) => {
++}> => withTransportLock(async () => {
++  invalidateQueryCaches()
++  return withRecoveredCollector(async (page) => {
+     await page.bringToFront().catch(() => undefined)
+     await restoreCollectorPage(page)
+     const cookies = await page.context().cookies('https://wwws.airfrance.fr')
+@@ -72,14 +80,8 @@ export const confirmFlyingBlueSession = async (): Promise<{
+       const authenticated = await probeCustomer(page)
+       return { authenticated, cookieCount, url: page.url() }
+     } catch (error) {
+-      if (error instanceof FlyingBlueAuthError) {
+-        return { authenticated: false, cookieCount, url: page.url() }
+-      }
+-      const message = error instanceof Error ? error.message : String(error)
+-      if (/401|not authenticated|Flying Blue|CustomerAPI/i.test(message)) {
+-        return { authenticated: false, cookieCount, url: page.url() }
+-      }
++      if (isAuthenticationFailure(error)) return { authenticated: false, cookieCount, url: page.url() }
+       throw error
+     }
+   })
+-))
++})
+diff --git a/server/af/browser.ts b/server/af/browser.ts
+index 2001d40ccfec3d94b6fb9750b84edea10384ccdf..f95853dcd6c336eb60ec97fb9be96c03c10acb8a 100644
+--- a/server/af/browser.ts
++++ b/server/af/browser.ts
+@@ -1,3 +1,4 @@
++import { invalidateQueryCaches } from './explore-cache.js'
+ import { chromium, type Browser, type BrowserContext, type Page } from 'patchright'
+ import {
+   releaseProfileBrowsers,
+@@ -143,6 +144,7 @@ const pageIsResponsive = async (page: Page): Promise<boolean> => {
+ }
+ 
+ export const closeAirFranceTransport = async (): Promise<void> => {
++  invalidateQueryCaches()
+   const context = await contextPromise?.catch(() => undefined)
+   contextPromise = undefined
+   if (context) await context.close().catch(() => undefined)
+@@ -150,6 +152,7 @@ export const closeAirFranceTransport = async (): Promise<void> => {
+   browserPromise = undefined
+   ownedBrowser = undefined
+   if (browser) await browser.close().catch(() => undefined)
++  invalidateQueryCaches()
+ }
+ 
+ const recoverPoisonedProfile = async (): Promise<void> => {
+diff --git a/server/af/cash-explore.ts b/server/af/cash-explore.ts
+index ab94d0543e190b76a45b74aa5ea68d956b4202a6..e4e0ee1a83e04606aa08c855266dc446161c475a 100644
+--- a/server/af/cash-explore.ts
++++ b/server/af/cash-explore.ts
+@@ -2,23 +2,16 @@ import { randomUUID } from 'node:crypto'
+ import type { SearchRequest } from '../../src/types.js'
+ import { withRecoveredCollector, withTransportLock } from './browser.js'
+ import { loadExploreMonthsFromHorizon } from './explore-chunks.js'
++import { cashExploreCache, exploreCacheKey } from './explore-cache.js'
+ import { createActiveHashes, withHashFallback } from './hash-fallback.js'
+-import { CACHE_TTL_MS } from './hashes.js'
+-import { parseMonthlyFares } from './parsers.js'
++import { parseLowestFarePayload, parseMonthlyFares } from './parsers.js'
+ import { warmAkamaiSession } from './session-warm.js'
+ import { postGraphQlWithRetry } from './transport.js'
+ import type { ExploreCapture, LowestFarePayload } from './types.js'
+ import { lowestFareVariables, monthBounds, monthlyInterval } from './variables.js'
+ 
+-const exploreCache = new Map<string, { capture: ExploreCapture; expiresAt: number }>()
+-const exploreInFlight = new Map<string, Promise<ExploreCapture>>()
+ const hashes = createActiveHashes()
+ 
+-const exploreKey = (request: SearchRequest): string => [
+-  'explore', 'LEISURE', request.origin.code, request.destination.code,
+-  request.adults, [...request.cabins].sort().join(','),
+-].join('|')
+-
+ const executeCashExplore = async (request: SearchRequest): Promise<ExploreCapture> => (
+   withTransportLock(() => withRecoveredCollector(async (page) => withHashFallback(hashes, async () => {
+     await warmAkamaiSession(page)
+@@ -35,7 +28,7 @@ const executeCashExplore = async (request: SearchRequest): Promise<ExploreCaptur
+       lowestFareVariables(request, searchStateUuid, 'LEISURE', firstMonthDate, lastMonthDate, 'MONTH'),
+     )
+     const monthlySeeds = parseMonthlyFares(
+-      monthlyPayload.data?.lowestFareOffers?.lowestOffers ?? [],
++      parseLowestFarePayload(monthlyPayload, 'LEISURE'),
+       'LEISURE',
+     )
+     const months = await loadExploreMonthsFromHorizon(
+@@ -52,7 +45,7 @@ const executeCashExplore = async (request: SearchRequest): Promise<ExploreCaptur
+             request, searchStateUuid, 'LEISURE', firstMonthDate, lastMonthDate, 'DAY',
+           ),
+         )
+-        return dailyPayload.data?.lowestFareOffers?.lowestOffers ?? []
++        return parseLowestFarePayload(dailyPayload, 'LEISURE')
+       },
+       async (seed) => {
+         const [firstDate, lastDate] = monthBounds(seed.month)
+@@ -62,7 +55,7 @@ const executeCashExplore = async (request: SearchRequest): Promise<ExploreCaptur
+           hashes.lowestFare,
+           lowestFareVariables(request, searchStateUuid, 'LEISURE', firstDate, lastDate, 'DAY'),
+         )
+-        return dailyPayload.data?.lowestFareOffers?.lowestOffers ?? []
++        return parseLowestFarePayload(dailyPayload, 'LEISURE')
+       },
+     )
+ 
+@@ -73,19 +66,10 @@ const executeCashExplore = async (request: SearchRequest): Promise<ExploreCaptur
+ export const exploreCashFares = async (
+   request: SearchRequest,
+ ): Promise<ExploreCapture & { cacheHit: boolean }> => {
+-  const key = exploreKey(request)
+-  const cached = exploreCache.get(key)
+-  if (cached && cached.expiresAt > Date.now()) return { ...cached.capture, cacheHit: true }
+-  if (cached) exploreCache.delete(key)
+-  const active = exploreInFlight.get(key)
+-  if (active) return { ...await active, cacheHit: true }
+-  const exploration = executeCashExplore(request)
+-  exploreInFlight.set(key, exploration)
+-  try {
+-    const capture = await exploration
+-    exploreCache.set(key, { capture, expiresAt: Date.now() + CACHE_TTL_MS })
+-    return { ...capture, cacheHit: false }
+-  } finally {
+-    exploreInFlight.delete(key)
+-  }
++  const query = structuredClone(request)
++  const { capture, cacheHit } = await cashExploreCache.getOrLoad(
++    exploreCacheKey('LEISURE', query),
++    () => executeCashExplore(query),
++  )
++  return { ...capture, cacheHit }
+ }
+diff --git a/server/af/cash.ts b/server/af/cash.ts
+index 08968f7ef781b41056f509e99808fe2d5ad58544..f7255a5d0e62d48271d597be5e55ff745614396e 100644
+--- a/server/af/cash.ts
++++ b/server/af/cash.ts
+@@ -1,11 +1,11 @@
+ import { randomUUID } from 'node:crypto'
+-import type { Page } from 'patchright'
+ import type { FareCalendarItem, RawOffer, SearchRequest } from '../../src/types.js'
+ import { withRecoveredCollector, withTransportLock } from './browser.js'
+ import { createActiveHashes, withHashFallback } from './hash-fallback.js'
+-import { CACHE_TTL_MS } from './hashes.js'
+-import { parseAvailableOffers, parseMonthlyFares, selectExactCandidates } from './parsers.js'
++import { cashSearchCache, exploreCacheKey } from './explore-cache.js'
++import { parseAvailableOffers, parseLowestFarePayload, parseMonthlyFares, selectExactCandidates } from './parsers.js'
+ import { warmAkamaiSession } from './session-warm.js'
++import { AirFranceResponseError, asResponseError } from './response-validation.js'
+ import { buildGraphQlBody, postGraphQlBatch, postGraphQlWithRetry } from './transport.js'
+ import type { AvailableOffersPayload, LowestFarePayload, SearchCapture } from './types.js'
+ import {
+@@ -16,42 +16,8 @@ import {
+   monthlyInterval,
+ } from './variables.js'
+ 
+-const cache = new Map<string, { capture: SearchCapture; expiresAt: number }>()
+-const inFlight = new Map<string, Promise<SearchCapture>>()
+ const hashes = createActiveHashes()
+ 
+-const requestKey = (request: SearchRequest): string => [
+-  'LEISURE',
+-  request.origin.code, request.destination.code, request.departureDate, request.returnDate,
+-  request.flexibleDays, request.tripLengthDays, request.adults, [...request.cabins].sort().join(','),
+-].join('|')
+-
+-const priceCandidate = async (
+-  page: Page,
+-  candidate: SearchRequest,
+-  searchStateUuid: string,
+-): Promise<{ offers: RawOffer[]; fare?: FareCalendarItem }> => {
+-  const bodies = [buildGraphQlBody(
+-    'SearchResultAvailableOffersQuery',
+-    hashes.availableOffers,
+-    availableOfferVariables(candidate, searchStateUuid, 'LEISURE'),
+-    false,
+-  )]
+-  const [result] = await postGraphQlBatch<AvailableOffersPayload>(page, bodies)
+-  if (!result.ok || !result.data) throw new Error(result.error ?? 'AvailableOffers failed')
+-  const parsed = parseAvailableOffers(result.data, new Date().toISOString(), candidate)
+-  const prices = parsed.flatMap((offer) => offer.prices).filter((price) => candidate.cabins.includes(price.cabin))
+-  const best = prices.sort((left, right) => (left.cash ?? Infinity) - (right.cash ?? Infinity))[0]
+-  const fare = best ? {
+-    departureDate: candidate.departureDate,
+-    returnDate: candidate.returnDate,
+-    label: datePairLabel(candidate.departureDate, candidate.returnDate),
+-    ...(best.cash != null ? { cash: best.cash } : {}),
+-    selected: false,
+-  } : undefined
+-  return { offers: parsed, fare }
+-}
+-
+ const executeCashSearch = async (request: SearchRequest): Promise<SearchCapture> => (
+   withTransportLock(() => withRecoveredCollector(async (page) => withHashFallback(hashes, async () => {
+     await warmAkamaiSession(page)
+@@ -69,7 +35,7 @@ const executeCashSearch = async (request: SearchRequest): Promise<SearchCapture>
+       lowestFareVariables(request, searchStateUuid, 'LEISURE', firstMonthDate, lastMonthDate, 'MONTH'),
+     )
+     const monthlyCalendar = parseMonthlyFares(
+-      monthlyPayload.data?.lowestFareOffers?.lowestOffers ?? [],
++      parseLowestFarePayload(monthlyPayload, 'LEISURE'),
+       'LEISURE',
+     )
+ 
+@@ -90,7 +56,7 @@ const executeCashSearch = async (request: SearchRequest): Promise<SearchCapture>
+       candidates = selectExactCandidates(
+         request,
+         candidates,
+-        preliminary.data?.lowestFareOffers?.lowestOffers ?? [],
++        parseLowestFarePayload(preliminary, 'LEISURE'),
+       )
+     }
+ 
+@@ -104,13 +70,16 @@ const executeCashSearch = async (request: SearchRequest): Promise<SearchCapture>
+     const offers: RawOffer[] = []
+     const fareCalendar: FareCalendarItem[] = []
+     const warnings: string[] = []
+-    let hardFailures = 0
++    let lastFailure: Error | undefined
+     for (let index = 0; index < candidates.length; index += 1) {
+       const candidate = candidates[index]
+       const result = batch[index]
+-      if (!result?.ok || !result.data) {
+-        hardFailures += 1
+-        if (result?.error) warnings.push(result.error.slice(0, 160))
++      if (!result) throw new Error('Missing batch query result')
++      if (!result.ok) {
++        const error = asResponseError(result)
++        if (error.blocksFurtherRequests || candidates.length === 1) throw error
++        lastFailure = error
++        warnings.push(`${candidate.departureDate}: ${error.message}`)
+         continue
+       }
+       try {
+@@ -129,19 +98,13 @@ const executeCashSearch = async (request: SearchRequest): Promise<SearchCapture>
+           })
+         }
+       } catch (error) {
+-        hardFailures += 1
+-        const detail = error instanceof Error ? error.message.slice(0, 160) : 'erreur offre'
+-        warnings.push(`${candidate.departureDate}: ${detail}`)
+-        if (candidates.length === 1) {
+-          const fallback = await priceCandidate(page, candidate, searchStateUuid)
+-          offers.push(...fallback.offers)
+-          if (fallback.fare) fareCalendar.push({ ...fallback.fare, selected: true })
+-        }
++        if (error instanceof AirFranceResponseError && error.blocksFurtherRequests) throw error
++        lastFailure = error instanceof Error ? error : new Error('Invalid offer response')
++        warnings.push(`${candidate.departureDate}: offer response failed`)
++        if (candidates.length === 1) throw lastFailure
+       }
+     }
+-    if (!offers.length && hardFailures > 0) {
+-      warnings.unshift('Air France n’a renvoyé aucune offre exploitable pour ces couples de dates.')
+-    }
++    if (!offers.length && lastFailure) throw lastFailure
+ 
+     return {
+       offers,
+@@ -157,19 +120,9 @@ const executeCashSearch = async (request: SearchRequest): Promise<SearchCapture>
+ export const searchCashOffers = async (
+   request: SearchRequest,
+ ): Promise<SearchCapture & { cacheHit: boolean }> => {
+-  const key = requestKey(request)
+-  const cached = cache.get(key)
+-  if (cached && cached.expiresAt > Date.now()) return { ...cached.capture, cacheHit: true }
+-  if (cached) cache.delete(key)
+-  const active = inFlight.get(key)
+-  if (active) return { ...await active, cacheHit: true }
+-  const search = executeCashSearch(request)
+-  inFlight.set(key, search)
+-  try {
+-    const capture = await search
+-    cache.set(key, { capture, expiresAt: Date.now() + CACHE_TTL_MS })
+-    return { ...capture, cacheHit: false }
+-  } finally {
+-    inFlight.delete(key)
+-  }
++  const query = structuredClone(request)
++  const { capture, cacheHit } = await cashSearchCache.getOrLoad(
++    exploreCacheKey('LEISURE', query), () => executeCashSearch(query),
++  )
++  return { ...capture, cacheHit }
+ }
+diff --git a/server/af/data-validation.ts b/server/af/data-validation.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ff21ae5112e3c2f75c0b999d49f830bc9106f75
+--- /dev/null
++++ b/server/af/data-validation.ts
+@@ -0,0 +1,28 @@
++import { AirFranceResponseError, isRecord } from './response-validation.js'
++
++export const dataError = (detail: string): AirFranceResponseError => new AirFranceResponseError({
++  ok: false, category: 'malformed', error: detail, retriable: false, blocksFurtherRequests: true,
++})
++
++export const recordValue = (value: unknown, field: string): Record<string, unknown> => {
++  if (!isRecord(value)) throw dataError(`Malformed ${field}`)
++  return value
++}
++
++export const arrayValue = (value: unknown, field: string): unknown[] => {
++  if (!Array.isArray(value)) throw dataError(`Missing or malformed ${field}`)
++  return value
++}
++
++export const isIsoDate = (value: unknown): value is string => {
++  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
++  const time = Date.parse(`${value}T00:00:00Z`)
++  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value
++}
++
++export const nonnegativeNumber = (value: unknown, field: string, integer = false): number => {
++  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || (integer && !Number.isSafeInteger(value))) {
++    throw dataError(`Invalid ${field}`)
++  }
++  return value
++}
+diff --git a/server/af/explore-cache-integration.test.ts b/server/af/explore-cache-integration.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..0de6c4a44ab617c66dccba8ecce5e8eddf3d8f17
+--- /dev/null
++++ b/server/af/explore-cache-integration.test.ts
+@@ -0,0 +1,99 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest'
++import type { SearchRequest } from '../../src/types.js'
++
++vi.mock('./browser.js', () => ({
++  withTransportLock: async (work: () => Promise<unknown>) => work(),
++  withRecoveredCollector: async (work: (page: object) => Promise<unknown>) => work({ waitForTimeout: vi.fn() }),
++  refreshCollectorPage: vi.fn(),
++}))
++vi.mock('./session-warm.js', () => ({ warmAkamaiSession: vi.fn() }))
++vi.mock('./reward-session.js', () => ({
++  prepareRewardSession: vi.fn(async () => ({ searchStateUuid: 'offline-session', companions: [] })),
++  rewardTransportOptions: {},
++}))
++vi.mock('./hash-fallback.js', () => ({
++  createActiveHashes: () => ({ lowestFare: 'offline-hash' }),
++  withHashFallback: async (_hashes: unknown, work: () => Promise<unknown>) => work(),
++}))
++vi.mock('./transport.js', () => ({
++  postGraphQlWithRetry: vi.fn(async (_page: unknown, _operation: string, _hash: string, variables: {
++    bookingFlow: string
++    lowestFareOffersRequest: { requestedConnections: Array<{ departureDate: string }> }
++  }) => ({
++    data: { lowestFareOffers: { lowestOffers: [{
++      flightDate: variables.lowestFareOffersRequest.requestedConnections[0].departureDate,
++      currency: variables.bookingFlow === 'REWARD' ? 'MILES' : 'EUR',
++      totalPrice: 1000,
++      totalPriceItinerary: 2000,
++    }] } },
++  })),
++}))
++
++import { exploreCashFares } from './cash-explore.js'
++import { exploreRewardFares } from './reward-explore.js'
++import { invalidateQueryCaches } from './explore-cache.js'
++import { postGraphQlWithRetry } from './transport.js'
++
++const sample = (): SearchRequest => ({
++  origin: { code: 'ICN', stationType: 'AIRPORT', cityCode: 'SEL', cityName: 'Seoul', countryName: 'Korea', displayText: 'Seoul', isOrigin: true, isDestination: true },
++  destination: { code: 'CDG', stationType: 'AIRPORT', cityCode: 'PAR', cityName: 'Paris', countryName: 'France', displayText: 'Paris', isOrigin: true, isDestination: true },
++  departureDate: '2026-11-01', returnDate: '2026-11-11', flexibleDays: 0, tripLengthDays: 10,
++  cabins: ['ECONOMY'], paymentMode: 'miles', adults: 1, maxStops: 2, maxDurationHours: 48,
++  nearbyAirports: false, separateTickets: false, longLayover: false, mileValueCents: 1.2,
++})
++
++beforeEach(() => {
++  invalidateQueryCaches()
++  vi.clearAllMocks()
++})
++
++describe.each([
++  ['cash', exploreCashFares],
++  ['reward', exploreRewardFares],
++] as const)('%s Explorer cache wiring', (_name, explore) => {
++  it('requests a fresh horizon after a departure month change', async () => {
++    const first = await explore(sample())
++    const unchanged = await explore(sample())
++    const changed = await explore({ ...sample(), departureDate: '2026-12-01', returnDate: '2026-12-11' })
++    expect(first.cacheHit).toBe(false)
++    expect(unchanged.cacheHit).toBe(true)
++    expect(changed.cacheHit).toBe(false)
++    expect(first.months[0].month).toBe('2026-11')
++    expect(changed.months[0].month).toBe('2026-12')
++    expect(postGraphQlWithRetry).toHaveBeenCalledTimes(4)
++  })
++
++  it('deduplicates simultaneous identical requests without sharing mutable output', async () => {
++    const [a, b] = await Promise.all([explore(sample()), explore(sample())])
++    expect([a.cacheHit, b.cacheHit]).toEqual([false, true])
++    expect(postGraphQlWithRetry).toHaveBeenCalledTimes(2)
++    a.months.splice(0)
++    expect(b.months).toHaveLength(1)
++    expect((await explore(sample())).months).toHaveLength(1)
++  })
++
++  it('snapshots query inputs before asynchronous work begins', async () => {
++    const mutable = sample()
++    const pending = explore(mutable)
++    mutable.departureDate = '2026-12-01'
++    mutable.returnDate = '2026-12-11'
++    expect((await pending).months[0].month).toBe('2026-11')
++    expect((await explore(sample())).cacheHit).toBe(true)
++  })
++
++  it('invalidates a completed result on an account/session change', async () => {
++    await explore(sample())
++    invalidateQueryCaches()
++    expect((await explore(sample())).cacheHit).toBe(false)
++    expect(postGraphQlWithRetry).toHaveBeenCalledTimes(4)
++  })
++
++  it('does not retain an upstream failure as an empty calendar', async () => {
++    vi.mocked(postGraphQlWithRetry).mockRejectedValueOnce(new Error('offline upstream failure'))
++    await expect(explore(sample())).rejects.toThrow('offline upstream failure')
++    const retry = await explore(sample())
++    expect(retry.cacheHit).toBe(false)
++    expect(retry.months).toHaveLength(1)
++    expect(postGraphQlWithRetry).toHaveBeenCalledTimes(3)
++  })
++})
+diff --git a/server/af/explore-cache.test.ts b/server/af/explore-cache.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..3162c874994335e5c82d14e29af67ed53dccdf4e
+--- /dev/null
++++ b/server/af/explore-cache.test.ts
+@@ -0,0 +1,193 @@
++import { describe, expect, it, vi } from 'vitest'
++import type { SearchRequest } from '../../src/types.js'
++import { ExploreResultCache, exploreCacheKey } from './explore-cache.js'
++
++const request = (): SearchRequest => ({
++  origin: { code: 'ICN', stationType: 'AIRPORT', cityCode: 'SEL', cityName: 'Seoul', countryName: 'Korea', displayText: 'Seoul', isOrigin: true, isDestination: true },
++  destination: { code: 'CDG', stationType: 'AIRPORT', cityCode: 'PAR', cityName: 'Paris', countryName: 'France', displayText: 'Paris', isOrigin: true, isDestination: true },
++  departureDate: '2026-11-01', returnDate: '2026-11-11', flexibleDays: 0, tripLengthDays: 10,
++  cabins: ['ECONOMY'], paymentMode: 'miles', adults: 1, maxStops: 2, maxDurationHours: 48,
++  nearbyAirports: false, separateTickets: false, longLayover: false, mileValueCents: 1.2,
++})
++
++const deferred = <T>() => {
++  let resolve!: (value: T) => void
++  let reject!: (error: Error) => void
++  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
++  return { promise, resolve, reject }
++}
++
++describe('calendar query identity', () => {
++  it.each([
++    ['departure date', (r: SearchRequest) => { r.departureDate = '2026-12-01' }],
++    ['return date', (r: SearchRequest) => { r.returnDate = '2026-12-11' }],
++    ['origin kind', (r: SearchRequest) => { r.origin.stationType = 'CITY' }],
++    ['destination kind', (r: SearchRequest) => { r.destination.stationType = 'CITY' }],
++    ['origin code', (r: SearchRequest) => { r.origin.code = 'PUS' }],
++    ['destination code', (r: SearchRequest) => { r.destination.code = 'AMS' }],
++    ['adults', (r: SearchRequest) => { r.adults = 2 }],
++    ['cabin', (r: SearchRequest) => { r.cabins = ['BUSINESS'] }],
++    ['payment', (r: SearchRequest) => { r.paymentMode = 'cash' }],
++    ['flexibility', (r: SearchRequest) => { r.flexibleDays = 3 }],
++    ['stay', (r: SearchRequest) => { r.tripLengthDays = 14 }],
++    ['stops', (r: SearchRequest) => { r.maxStops = 0 }],
++    ['duration', (r: SearchRequest) => { r.maxDurationHours = 24 }],
++    ['nearby', (r: SearchRequest) => { r.nearbyAirports = true }],
++    ['separate tickets', (r: SearchRequest) => { r.separateTickets = true }],
++    ['layovers', (r: SearchRequest) => { r.longLayover = true }],
++    ['mile value', (r: SearchRequest) => { r.mileValueCents = 1.5 }],
++  ])('keeps %s results separate', (_, change) => {
++    const original = request()
++    const changed = request()
++    change(changed)
++    expect(exploreCacheKey('REWARD', changed)).not.toBe(exploreCacheKey('REWARD', original))
++  })
++
++  it('separates cash and member rewards and canonicalizes cabin ordering', () => {
++    const first = { ...request(), cabins: ['ECONOMY', 'BUSINESS'] as SearchRequest['cabins'] }
++    const second = { ...request(), cabins: ['BUSINESS', 'ECONOMY', 'ECONOMY'] as SearchRequest['cabins'] }
++    expect(exploreCacheKey('REWARD', first)).toBe(exploreCacheKey('REWARD', second))
++    expect(exploreCacheKey('REWARD', first)).not.toBe(exploreCacheKey('LEISURE', first))
++  })
++
++  it('does not make different caches for translated station labels', () => {
++    const first = request()
++    const second = request()
++    second.origin.displayText = '인천'
++    second.destination.cityName = '파리'
++    expect(exploreCacheKey('REWARD', first)).toBe(exploreCacheKey('REWARD', second))
++  })
++})
++
++describe('calendar result lifecycle', () => {
++  it('deduplicates simultaneous identical requests and detaches all returned snapshots', async () => {
++    const cache = new ExploreResultCache<{ months: number[] }>({ ttlMs: 1000 })
++    const pending = deferred<{ months: number[] }>()
++    const load = vi.fn(() => pending.promise)
++    const first = cache.getOrLoad('same', load)
++    const second = cache.getOrLoad('same', load)
++    const upstream = { months: [1] }
++    pending.resolve(upstream)
++    const a = await first
++    const b = await second
++    expect(load).toHaveBeenCalledTimes(1)
++    expect([a.cacheHit, b.cacheHit]).toEqual([false, true])
++    a.capture.months.push(2)
++    b.capture.months.push(3)
++    upstream.months.push(4)
++    expect((await cache.getOrLoad('same', load)).capture).toEqual({ months: [1] })
++  })
++
++  it('expires at the exact TTL boundary without extending TTL on read', async () => {
++    let time = 0
++    const cache = new ExploreResultCache<number>({ ttlMs: 1000, now: () => time })
++    const load = vi.fn(async () => 1)
++    await cache.getOrLoad('key', load)
++    time = 999
++    expect((await cache.getOrLoad('key', load)).cacheHit).toBe(true)
++    time = 1000
++    expect((await cache.getOrLoad('key', load)).cacheHit).toBe(false)
++    expect(load).toHaveBeenCalledTimes(2)
++  })
++
++  it('never caches failures and releases the pending slot for a later retry', async () => {
++    const cache = new ExploreResultCache<number>({ ttlMs: 1000, maxInFlight: 1 })
++    const failed = vi.fn(async () => { throw new Error('temporary upstream failure') })
++    await expect(cache.getOrLoad('key', failed)).rejects.toThrow('temporary upstream failure')
++    const success = vi.fn(async () => 42)
++    expect(await cache.getOrLoad('key', success)).toEqual({ capture: 42, cacheHit: false })
++    expect(success).toHaveBeenCalledTimes(1)
++  })
++
++  it('returns a partial result to its caller without retaining it for the next query', async () => {
++    const cache = new ExploreResultCache<{ value: number; warnings: string[] }>({
++      ttlMs: 1000,
++      shouldCache: (value) => value.warnings.length === 0,
++    })
++    const partial = await cache.getOrLoad('key', async () => ({ value: 1, warnings: ['one month failed'] }))
++    expect(partial.capture.warnings).toHaveLength(1)
++    const complete = await cache.getOrLoad('key', async () => ({ value: 2, warnings: [] }))
++    expect(complete.cacheHit).toBe(false)
++    expect(complete.capture.value).toBe(2)
++    expect((await cache.getOrLoad('key', async () => ({ value: 3, warnings: [] }))).capture.value).toBe(2)
++  })
++
++  it('also releases pending work after a synchronous loader failure', async () => {
++    const cache = new ExploreResultCache<number>({ ttlMs: 1000, maxInFlight: 1 })
++    await expect(cache.getOrLoad('key', () => { throw new Error('sync failure') })).rejects.toThrow('sync failure')
++    expect((await cache.getOrLoad('key', async () => 42)).capture).toBe(42)
++  })
++
++  it('bounds retained calendars and evicts the least recently read one', async () => {
++    const cache = new ExploreResultCache<number>({ ttlMs: 1000, maxEntries: 2 })
++    await cache.getOrLoad('A', async () => 1)
++    await cache.getOrLoad('B', async () => 2)
++    await cache.getOrLoad('A', async () => 99)
++    await cache.getOrLoad('C', async () => 3)
++    expect((await cache.getOrLoad('A', async () => 99)).capture).toBe(1)
++    expect((await cache.getOrLoad('B', async () => 4)).cacheHit).toBe(false)
++  })
++
++  it('bounds distinct pending work but lets a matching request join it', async () => {
++    const cache = new ExploreResultCache<number>({ ttlMs: 1000, maxInFlight: 1 })
++    const pending = deferred<number>()
++    const first = cache.getOrLoad('A', () => pending.promise)
++    const joined = cache.getOrLoad('A', async () => 99)
++    await expect(cache.getOrLoad('B', async () => 2)).rejects.toThrow('Too many pending')
++    pending.resolve(1)
++    expect((await first).capture).toBe(1)
++    expect((await joined).capture).toBe(1)
++  })
++
++  it('invalidates completed member data immediately', async () => {
++    const cache = new ExploreResultCache<number>({ ttlMs: 1000 })
++    await cache.getOrLoad('key', async () => 1)
++    cache.clear()
++    expect(await cache.getOrLoad('key', async () => 2)).toEqual({ capture: 2, cacheHit: false })
++  })
++
++  it('rejects old session responses and prevents them overwriting newer work', async () => {
++    const cache = new ExploreResultCache<number>({ ttlMs: 1000 })
++    const old = deferred<number>()
++    const fresh = deferred<number>()
++    const first = cache.getOrLoad('key', () => old.promise)
++    const firstRejected = expect(first).rejects.toThrow('session changed')
++    const joined = cache.getOrLoad('key', async () => 99)
++    const joinedRejected = expect(joined).rejects.toThrow('session changed')
++    await Promise.resolve() // Let the old loader start before the account changes.
++    cache.clear()
++    const next = cache.getOrLoad('key', () => fresh.promise)
++    old.resolve(1)
++    await Promise.all([firstRejected, joinedRejected])
++    const last = cache.getOrLoad('key', async () => 99)
++    fresh.resolve(2)
++    expect((await next).capture).toBe(2)
++    expect((await last).capture).toBe(2)
++    expect((await cache.getOrLoad('key', async () => 99)).capture).toBe(2)
++  })
++
++  it('does not start queued work after its session was already invalidated', async () => {
++    const cache = new ExploreResultCache<number>({ ttlMs: 1000 })
++    const load = vi.fn(async () => 1)
++    const pending = cache.getOrLoad('key', load)
++    const rejected = expect(pending).rejects.toThrow('session changed')
++    cache.clear()
++    await rejected
++    expect(load).not.toHaveBeenCalled()
++  })
++
++  it('can disable completed-result caching while retaining in-flight deduplication', async () => {
++    const cache = new ExploreResultCache<number>({ ttlMs: 0 })
++    const load = vi.fn(async () => 1)
++    expect((await cache.getOrLoad('key', load)).cacheHit).toBe(false)
++    expect((await cache.getOrLoad('key', load)).cacheHit).toBe(false)
++    expect(load).toHaveBeenCalledTimes(2)
++  })
++
++  it.each([
++    { ttlMs: -1 }, { ttlMs: Number.NaN }, { ttlMs: 1000, maxEntries: 0 },
++    { ttlMs: 1000, maxEntries: 1.5 }, { ttlMs: 1000, maxInFlight: 0 },
++  ])('rejects invalid cache bounds %#', (options) => {
++    expect(() => new ExploreResultCache(options)).toThrow(TypeError)
++  })
++})
+diff --git a/server/af/explore-cache.ts b/server/af/explore-cache.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..9eb6080a9d902e7e02b58d598ff742d3197fddef
+--- /dev/null
++++ b/server/af/explore-cache.ts
+@@ -0,0 +1,140 @@
++import type { SearchRequest } from '../../src/types.js'
++import { CACHE_TTL_MS } from './hashes.js'
++import type { BookingFlow, ExploreCapture, SearchCapture } from './types.js'
++
++/** Include the whole query horizon and station kind; display labels are not query inputs. */
++export const exploreCacheKey = (flow: BookingFlow, request: SearchRequest): string => JSON.stringify({
++  flow,
++  origin: [request.origin.code, request.origin.stationType],
++  destination: [request.destination.code, request.destination.stationType],
++  departureDate: request.departureDate,
++  returnDate: request.returnDate,
++  adults: request.adults,
++  cabins: [...new Set(request.cabins)].sort(),
++  paymentMode: request.paymentMode,
++  flexibleDays: request.flexibleDays,
++  tripLengthDays: request.tripLengthDays,
++  maxStops: request.maxStops,
++  maxDurationHours: request.maxDurationHours,
++  nearbyAirports: request.nearbyAirports,
++  separateTickets: request.separateTickets,
++  longLayover: request.longLayover,
++  mileValueCents: request.mileValueCents,
++})
++
++interface CacheOptions<T> {
++  ttlMs: number
++  maxEntries?: number
++  maxInFlight?: number
++  now?: () => number
++  shouldCache?: (value: T) => boolean
++}
++
++interface Entry<T> {
++  value: T
++  expiresAt: number
++}
++
++/** Successful, detached snapshots only. Failed work never becomes an empty cached result. */
++export class ExploreResultCache<T> {
++  private readonly entries = new Map<string, Entry<T>>()
++  private readonly inFlight = new Map<string, Promise<T>>()
++  private readonly ttlMs: number
++  private readonly maxEntries: number
++  private readonly maxInFlight: number
++  private readonly now: () => number
++  private readonly shouldCache: (value: T) => boolean
++  private generation = 0
++
++  constructor({ ttlMs, maxEntries = 128, maxInFlight = 32, now = Date.now, shouldCache = () => true }: CacheOptions<T>) {
++    if (!Number.isFinite(ttlMs) || ttlMs < 0) throw new TypeError('Cache TTL must be finite and non-negative')
++    if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) throw new TypeError('Cache capacity must be positive')
++    if (!Number.isSafeInteger(maxInFlight) || maxInFlight < 1) throw new TypeError('Pending capacity must be positive')
++    this.ttlMs = ttlMs
++    this.maxEntries = maxEntries
++    this.maxInFlight = maxInFlight
++    this.now = now
++    this.shouldCache = shouldCache
++  }
++
++  /** Called when a member session changes. Old pending work may finish but cannot repopulate the cache. */
++  clear(): void {
++    this.generation += 1
++    this.entries.clear()
++    this.inFlight.clear()
++  }
++
++  private prune(time: number): void {
++    for (const [key, entry] of this.entries) {
++      if (entry.expiresAt <= time) this.entries.delete(key)
++    }
++  }
++
++  async getOrLoad(key: string, load: () => Promise<T>): Promise<{ capture: T; cacheHit: boolean }> {
++    const time = this.now()
++    this.prune(time)
++    const cached = this.entries.get(key)
++    if (cached) {
++      // Refresh LRU position without extending the expiry.
++      this.entries.delete(key)
++      this.entries.set(key, cached)
++      return { capture: structuredClone(cached.value), cacheHit: true }
++    }
++    const pending = this.inFlight.get(key)
++    if (pending) {
++      const generation = this.generation
++      const value = await pending
++      if (generation !== this.generation) throw new Error('Calendar session changed during query')
++      return { capture: structuredClone(value), cacheHit: true }
++    }
++    if (this.inFlight.size >= this.maxInFlight) throw new Error('Too many pending calendar queries')
++
++    const generation = this.generation
++    // Defer work until its promise is registered so even synchronous failures clean up correctly.
++    const work = Promise.resolve().then(() => {
++      if (generation !== this.generation) throw new Error('Calendar session changed during query')
++      return load()
++    }).then((value) => structuredClone(value))
++    this.inFlight.set(key, work)
++    try {
++      const value = await work
++      if (generation !== this.generation) throw new Error('Calendar session changed during query')
++      if (generation === this.generation && this.inFlight.get(key) === work && this.ttlMs > 0 && this.shouldCache(value)) {
++        this.prune(this.now())
++        while (this.entries.size >= this.maxEntries) {
++          const oldest = this.entries.keys().next().value
++          if (oldest == null) break
++          this.entries.delete(oldest)
++        }
++        this.entries.set(key, { value, expiresAt: this.now() + this.ttlMs })
++      }
++      return { capture: structuredClone(value), cacheHit: false }
++    } finally {
++      // A cleared session may already have a newer promise for this key.
++      if (this.inFlight.get(key) === work) this.inFlight.delete(key)
++    }
++  }
++}
++
++export const cashExploreCache = new ExploreResultCache<ExploreCapture>({ ttlMs: CACHE_TTL_MS })
++export const rewardExploreCache = new ExploreResultCache<ExploreCapture>({ ttlMs: CACHE_TTL_MS })
++export const cashSearchCache = new ExploreResultCache<SearchCapture>({
++  ttlMs: CACHE_TTL_MS,
++  shouldCache: (capture) => !capture.warnings?.length,
++})
++export const rewardSearchCache = new ExploreResultCache<SearchCapture>({
++  ttlMs: CACHE_TTL_MS,
++  shouldCache: (capture) => !capture.warnings?.length,
++})
++
++export const invalidateExploreCaches = (): void => {
++  cashExploreCache.clear()
++  rewardExploreCache.clear()
++}
++
++/** Invalidate all member-sensitive queries after login, logout, profile import, or collector close. */
++export const invalidateQueryCaches = (): void => {
++  invalidateExploreCaches()
++  cashSearchCache.clear()
++  rewardSearchCache.clear()
++}
+diff --git a/server/af/explore-chunks.ts b/server/af/explore-chunks.ts
+index 278ea8ce2fa217441b7f0594e9e3c38bbd2706f4..8f8054380005819e6eeee284714810139771fad3 100644
+--- a/server/af/explore-chunks.ts
++++ b/server/af/explore-chunks.ts
+@@ -1,6 +1,5 @@
+ import type { Page } from 'patchright'
+ import type { ExploreFare, ExploreMonthItem } from '../../src/types.js'
+-import { refreshCollectorPage } from './browser.js'
+ import {
+   BATCH_CONCURRENCY,
+   BATCH_SPACING_MS,
+@@ -59,7 +58,7 @@ export const loadExploreMonthsFromHorizon = async (
+   return [...months, ...filled].sort((left, right) => left.month.localeCompare(right.month))
+ }
+ 
+-/** FilterScript-style chunked DAY loads with refresh retry (gap-fill only). */
++/** Chunk DAY loads without replaying failures already handled by the transport. */
+ export const loadExploreMonths = async (
+   page: Page,
+   seeds: MonthSeed[],
+@@ -69,18 +68,22 @@ export const loadExploreMonths = async (
+ 
+   for (let chunkStart = 0; chunkStart < seeds.length; chunkStart += EXPLORE_CHUNK_SIZE) {
+     const chunk = seeds.slice(chunkStart, chunkStart + EXPLORE_CHUNK_SIZE)
+-    const failedIndexes: number[] = []
++    let failed: unknown
++    let hasFailed = false
+     let nextOffset = 0
+     const worker = async () => {
+       while (nextOffset < chunk.length) {
++        if (hasFailed) return
+         const offset = nextOffset
+         nextOffset += 1
+         const index = chunkStart + offset
+         if (offset > 0) await page.waitForTimeout(BATCH_SPACING_MS)
++        if (hasFailed) return
+         try {
+           monthResults[index] = await loadMonth(chunk[offset])
+-        } catch {
+-          failedIndexes.push(index)
++        } catch (error) {
++          if (!hasFailed) failed = error
++          hasFailed = true
+         }
+       }
+     }
+@@ -89,13 +92,7 @@ export const loadExploreMonths = async (
+       () => worker(),
+     ))
+ 
+-    if (failedIndexes.length) {
+-      await refreshCollectorPage(page)
+-      await Promise.all(failedIndexes.map(async (index, retryOffset) => {
+-        if (retryOffset > 0) await page.waitForTimeout(BATCH_SPACING_MS)
+-        monthResults[index] = await loadMonth(seeds[index])
+-      }))
+-    }
++    if (hasFailed) throw failed
+     if (chunkStart + chunk.length < seeds.length) {
+       await page.waitForTimeout(EXPLORE_CHUNK_DELAY_MS)
+     }
+diff --git a/server/af/parsers-validation.test.ts b/server/af/parsers-validation.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..bb232fab27cd983f34d4492dd7229750444efbd0
+--- /dev/null
++++ b/server/af/parsers-validation.test.ts
+@@ -0,0 +1,73 @@
++import { describe, expect, it } from 'vitest'
++import { parseAvailableOffers, parseDailyTopFares, parseLowestFarePayload, parseMonthlyFares } from './parsers.js'
++import { AirFranceResponseError } from './response-validation.js'
++
++const calendar = (rows: unknown) => ({ data: { lowestFareOffers: { lowestOffers: rows } } })
++const offer = () => ({
++  data: { availableOffers: { offerItineraries: [{
++    activeConnection: { segments: [{ origin: { code: 'ICN' }, destination: { code: 'CDG' } }] },
++    flightProducts: [
++      { connections: [{ cabinClass: 'ECONOMY', price: { amount: 100, currencyCode: 'EUR' } }, { price: { amount: 20, currencyCode: 'EUR' } }] },
++      { connections: [{ cabinClass: 'BUSINESS', price: { amount: 200, currencyCode: 'EUR' } }, { price: { amount: 80, currencyCode: 'EUR' } }] },
++    ],
++    upsellCabinProducts: [{ connections: [
++      { cabinClass: 'ECONOMY', price: { amount: 100, currencyCode: 'EUR' } },
++      { cabinClass: 'BUSINESS', price: { amount: 200, currencyCode: 'EUR' } },
++    ] }],
++  }] } },
++})
++
++describe('strict response interpretation', () => {
++  it.each([null, [], {}, { data: null }, { data: {} }, { data: { availableOffers: {} } }, { data: { availableOffers: { offerItineraries: null } } }])('rejects missing offer schema: %j', (payload) => {
++    expect(() => parseAvailableOffers(payload as never)).toThrow(AirFranceResponseError)
++  })
++  it('only accepts an explicit empty offer list as no seats', () => {
++    expect(parseAvailableOffers({ data: { availableOffers: { offerItineraries: [] } } })).toEqual([])
++  })
++  it.each([null, [], {}, { data: {} }, calendar(null), calendar({}), calendar([null])])('rejects malformed calendar: %j', (payload) => {
++    expect(() => parseLowestFarePayload(payload)).toThrow(AirFranceResponseError)
++  })
++  it('preserves a valid empty calendar', () => expect(parseLowestFarePayload(calendar([]))).toEqual([]))
++  it('rejects partial GraphQL errors even when data is present', () => {
++    expect(() => parseLowestFarePayload({ ...calendar([]), errors: [{ message: 'failed' }] })).toThrow(AirFranceResponseError)
++  })
++  it.each(['2026-02-29', '2026-13-01', '2026-12-32', '2026-1-01', 'not-a-date'])('rejects impossible date %s', (flightDate) => {
++    expect(() => parseLowestFarePayload(calendar([{ flightDate, totalPrice: 100 }]))).toThrow('fare date')
++  })
++  it('accepts leap day and an explicit no-flight record', () => {
++    expect(parseLowestFarePayload(calendar([{ flightDate: '2028-02-29', noFlight: true }]))).toHaveLength(1)
++  })
++  it('rejects incomplete available fare rather than calling it empty', () => {
++    expect(() => parseLowestFarePayload(calendar([{ flightDate: '2026-12-01' }]))).toThrow('Missing fare amount')
++  })
++  it.each([-1, NaN, Infinity, '100'])('rejects invalid money %j', (amount) => {
++    expect(() => parseMonthlyFares([{ flightDate: '2026-12-01', totalPrice: amount as number }], 'REWARD')).toThrow('fare amount')
++    expect(() => parseDailyTopFares([{ flightDate: '2026-12-01', totalPrice: amount as number }], '2026-12-01')).toThrow('fare amount')
++  })
++  it('does not match two missing IDs to the first product', () => {
++    expect(parseAvailableOffers(offer()).at(0)?.prices).toMatchObject([
++      { cabin: 'ECONOMY', cash: 120 }, { cabin: 'BUSINESS', cash: 280 },
++    ])
++  })
++  it('rejects ambiguous matching products', () => {
++    const payload = offer()
++    const itinerary = payload.data.availableOffers.offerItineraries[0]
++    itinerary.flightProducts.push(structuredClone(itinerary.flightProducts[0]))
++    expect(() => parseAvailableOffers(payload)).toThrow('ambiguous')
++  })
++  it('rejects an incomplete round trip instead of publishing a one-way total', () => {
++    const payload = offer()
++    payload.data.availableOffers.offerItineraries[0].flightProducts[0].connections.pop()
++    expect(() => parseAvailableOffers(payload)).toThrow('Incomplete round-trip')
++  })
++  it('rejects invalid return-leg money', () => {
++    const payload = offer()
++    payload.data.availableOffers.offerItineraries[0].flightProducts[0].connections[1].price.amount = -1
++    expect(() => parseAvailableOffers(payload)).toThrow('round-trip amount')
++  })
++  it('rejects missing itinerary segments', () => {
++    const payload = offer()
++    payload.data.availableOffers.offerItineraries[0].activeConnection.segments = []
++    expect(() => parseAvailableOffers(payload)).toThrow('flight segments')
++  })
++})
+diff --git a/server/af/parsers.ts b/server/af/parsers.ts
+index 36c73aed98158cb90b113012e97c8c00cadfac21..b65dba5c124fee43ad853e2dbf9aad08ba271f2c 100644
+--- a/server/af/parsers.ts
++++ b/server/af/parsers.ts
+@@ -1,19 +1,40 @@
+ import type { Cabin, CabinPrice, ExploreFare, MonthlyFareItem, RawOffer, SearchRequest } from '../../src/types.js'
+ import { MAX_EXACT_DATE_PAIRS } from './hashes.js'
+-import { graphQlErrorMessage } from './hashcash.js'
+-import type { AvailableOffersPayload, BookingFlow, LowestFareOffer } from './types.js'
++import { arrayValue, dataError, isIsoDate, nonnegativeNumber, recordValue } from './data-validation.js'
++import { asResponseError, normalizeFetchResult } from './response-validation.js'
++import type { ApiOfferItinerary, ApiSegment, AvailableOffersPayload, BookingFlow, LowestFareOffer } from './types.js'
+ 
+ const roundMoney = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100
+ 
++/** A missing calendar field is a failed query; an explicit [] is a confirmed empty calendar. */
++export const parseLowestFarePayload = (payload: unknown, flow?: BookingFlow): LowestFareOffer[] => {
++  const result = normalizeFetchResult<{ data: Record<string, unknown> }>({ ok: true, status: 200, data: payload })
++  if (!result.ok) throw asResponseError(result)
++  const calendar = recordValue(result.data.data.lowestFareOffers, 'lowest fare calendar')
++  return arrayValue(calendar.lowestOffers, 'lowest fare rows').map((value) => {
++    const row = recordValue(value, 'lowest fare row')
++    if (!isIsoDate(row.flightDate)) throw dataError('Invalid fare date')
++    if (row.noFlight != null && typeof row.noFlight !== 'boolean') throw dataError('Invalid no-flight flag')
++    if (!row.noFlight && row.totalPrice == null && row.totalPriceItinerary == null) throw dataError('Missing fare amount')
++    if (!row.noFlight) roundTripFloor(row as LowestFareOffer, flow === 'REWARD' || row.currency === 'MILES')
++    return row as LowestFareOffer
++  })
++}
++
+ const cabinFromApi = (value?: string): Cabin | undefined => {
+   if (value === 'ECONOMY' || value === 'PREMIUM' || value === 'BUSINESS') return value
+   return undefined
+ }
+ 
+ /** Prefer round-trip Open Dates floor (`totalPriceItinerary`); fall back to outbound. */
+-const roundTripFloor = (fare: LowestFareOffer): number | undefined => (
+-  fare.totalPriceItinerary ?? fare.totalPrice
+-)
++const roundTripFloor = (fare: LowestFareOffer, miles = fare.currency === 'MILES'): number | undefined => {
++  if (!isIsoDate(fare.flightDate)) throw dataError('Invalid fare date')
++  for (const value of [fare.totalPriceItinerary, fare.totalPrice]) {
++    if (value != null) nonnegativeNumber(value, 'fare amount', miles)
++  }
++  if (fare.totalTaxDetails?.totalPrice != null) nonnegativeNumber(fare.totalTaxDetails.totalPrice, 'tax amount')
++  return fare.totalPriceItinerary ?? fare.totalPrice
++}
+ 
+ export const parseMonthlyFares = (
+   lowestFares: LowestFareOffer[],
+@@ -23,7 +44,7 @@ export const parseMonthlyFares = (
+   const byMonth = new Map<string, MonthlyFareItem>()
+   for (const fare of lowestFares) {
+     if (!fare.flightDate || fare.noFlight) continue
+-    const value = roundTripFloor(fare)
++    const value = roundTripFloor(fare, bookingFlow === 'REWARD' || fare.currency === 'MILES')
+     if (value == null) continue
+     const month = fare.flightDate.slice(0, 7)
+     const current = byMonth.get(month)
+@@ -136,32 +157,47 @@ export const parseAvailableOffers = (
+   verifiedAt = new Date().toISOString(),
+   dates?: Pick<SearchRequest, 'departureDate' | 'returnDate'>,
+ ): RawOffer[] => {
+-  if (payload.errors?.length) throw new Error(graphQlErrorMessage(payload.errors))
+-  if (payload.data?.availableOffers?.code) {
+-    throw new Error([
+-      payload.data.availableOffers.code,
+-      payload.data.availableOffers.message,
+-      payload.data.availableOffers.description,
+-    ].filter(Boolean).join(': '))
+-  }
+-  const itineraries = payload.data?.availableOffers?.offerItineraries ?? []
++  const normalized = normalizeFetchResult<AvailableOffersPayload>({ ok: true, status: 200, data: payload })
++  if (!normalized.ok) throw asResponseError(normalized)
++  const available = recordValue(normalized.data.data?.availableOffers, 'available offers')
++  if (available.code) throw dataError('Provider returned an offer error')
++  const itineraries = arrayValue(available.offerItineraries, 'offer itineraries') as ApiOfferItinerary[]
+   return itineraries.flatMap((itinerary, offerIndex): RawOffer[] => {
+-    const apiSegments = itinerary.activeConnection?.segments ?? []
+-    if (!apiSegments.length) return []
++    recordValue(itinerary, 'offer itinerary')
++    const apiSegments = arrayValue(itinerary.activeConnection?.segments, 'flight segments') as ApiSegment[]
++    if (!apiSegments.length) throw dataError('Offer has no flight segments')
+ 
+     const pricesByCabin = new Map<Cabin, CabinPrice>()
+     let promo = false
+-    for (const product of itinerary.upsellCabinProducts ?? []) {
+-      for (const connection of product.connections ?? []) {
++    arrayValue(itinerary.flightProducts, 'round-trip products')
++    for (const product of arrayValue(itinerary.upsellCabinProducts, 'cabin products') as NonNullable<typeof itinerary.upsellCabinProducts>) {
++      recordValue(product, 'cabin product')
++      for (const connection of arrayValue(product.connections, 'cabin connections') as NonNullable<typeof product.connections>) {
++        recordValue(connection, 'cabin connection')
+         const cabin = cabinFromApi(connection.cabinClass)
+         const currency = connection.price?.currencyCode
+         if (!cabin || connection.price?.amount == null || (currency !== 'EUR' && currency !== 'MILES')) continue
+-        const completeProduct = itinerary.flightProducts?.find((candidate) => {
++        nonnegativeNumber(connection.price.amount, 'price', currency === 'MILES')
++        const matches = itinerary.flightProducts?.filter((candidate) => {
++          recordValue(candidate, 'round-trip product')
++          arrayValue(candidate.connections, 'round-trip connections')
+           const active = candidate.connections?.[0]
+-          return active?._id === connection._id
+-            || (active?.price?.amount === connection.price?.amount && active?.price?.currencyCode === currency)
+-        })
+-        const completeConnections = completeProduct?.connections?.length ? completeProduct.connections : [connection]
++          if (typeof connection._id === 'string' && connection._id.length) return active?._id === connection._id
++          return active?.price?.amount === connection.price?.amount && active?.price?.currencyCode === currency
++            && (!active.cabinClass || active.cabinClass === cabin)
++        }) ?? []
++        if (matches.length !== 1) throw dataError('Missing or ambiguous round-trip product')
++        const completeConnections = matches[0].connections!
++        if (completeConnections.length !== 2) throw dataError('Incomplete round-trip pricing')
++        for (const item of completeConnections) {
++          recordValue(item, 'round-trip connection')
++          if (item.price?.currencyCode !== currency) throw dataError('Inconsistent round-trip currency')
++          nonnegativeNumber(item.price?.amount, 'round-trip amount', currency === 'MILES')
++          if (item.tax?.amount != null) {
++            if (item.tax.currencyCode !== 'EUR') throw dataError('Unsupported tax currency')
++            nonnegativeNumber(item.tax.amount, 'tax amount')
++          }
++        }
+         const rawAmount = completeConnections.reduce((sum, item) => (
+           item.price?.currencyCode === currency ? sum + (item.price.amount ?? 0) : sum
+         ), 0)
+@@ -169,7 +205,12 @@ export const parseAvailableOffers = (
+           item.tax?.currencyCode === 'EUR' ? sum + (item.tax.amount ?? 0) : sum
+         ), 0)
+         const amount = currency === 'EUR' ? roundMoney(rawAmount) : rawAmount
+-        const taxes = roundMoney(rawTaxes)
++        const knownTaxes = completeConnections.filter((item) => item.tax?.amount != null).length
++        if (knownTaxes > 0 && knownTaxes < completeConnections.length) throw dataError('Incomplete tax total')
++        const taxes = knownTaxes ? roundMoney(rawTaxes) : undefined
++        if (taxes != null) nonnegativeNumber(taxes, 'tax total')
++        nonnegativeNumber(amount, 'total amount', currency === 'MILES')
++        if (connection.numberOfSeatsAvailable != null) nonnegativeNumber(connection.numberOfSeatsAvailable, 'remaining seats', true)
+         const current = pricesByCabin.get(cabin) ?? { cabin }
+         if (currency === 'EUR' && (current.cash == null || amount < current.cash)) {
+           current.cash = amount
+@@ -187,12 +228,13 @@ export const parseAvailableOffers = (
+       }
+     }
+     const prices = [...pricesByCabin.values()]
+-    if (!prices.length) return []
++    if (!prices.length) throw dataError('Offer has no supported cabin prices')
+ 
+     const segments = apiSegments.flatMap((segment) => {
++      recordValue(segment, 'flight segment')
+       const from = segment.origin?.code
+       const to = segment.destination?.code
+-      if (!from || !to) return []
++      if (typeof from !== 'string' || typeof to !== 'string' || !from || !to) throw dataError('Missing segment airports')
+       const carrier = segment.marketingFlight?.carrier?.name
+         ?? segment.marketingFlight?.operatingFlight?.carrier?.name
+         ?? segment.marketingFlight?.carrier?.code
+diff --git a/server/af/response-validation.ts b/server/af/response-validation.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..ba61b78b96519420673f42661b2727190e70c722
+--- /dev/null
++++ b/server/af/response-validation.ts
+@@ -0,0 +1,118 @@
++export type ResponseFailureCategory = 'http' | 'graphql' | 'network' | 'malformed'
++
++export interface TransportFetchResult {
++  ok: boolean
++  status?: number
++  data?: unknown
++  error?: string
++  category?: ResponseFailureCategory
++}
++
++export interface GraphQlFailure {
++  ok: false
++  data?: undefined
++  error: string
++  category: ResponseFailureCategory
++  status?: number
++  code?: string
++  retriable: boolean
++  blocksFurtherRequests: boolean
++}
++
++export type GraphQlResult<T> = { ok: true; status: number; data: T; error?: undefined } | GraphQlFailure
++
++export class AirFranceResponseError extends Error {
++  readonly category: ResponseFailureCategory
++  readonly status?: number
++  readonly code?: string
++  readonly retriable: boolean
++  readonly blocksFurtherRequests: boolean
++
++  constructor(failure: GraphQlFailure) {
++    super(failure.error)
++    this.name = 'AirFranceResponseError'
++    this.category = failure.category
++    this.status = failure.status
++    this.code = failure.code
++    this.retriable = failure.retriable
++    this.blocksFurtherRequests = failure.blocksFurtherRequests
++  }
++}
++
++export const isRecord = (value: unknown): value is Record<string, unknown> => (
++  value !== null && typeof value === 'object' && !Array.isArray(value)
++)
++
++const transientHttp = new Set([408, 500, 502, 503, 504])
++const blockingHttp = new Set([401, 403, 429])
++
++const failure = (
++  category: ResponseFailureCategory,
++  error: string,
++  status?: number,
++  extra: Partial<Pick<GraphQlFailure, 'code' | 'blocksFurtherRequests'>> = {},
++): GraphQlFailure => ({
++  ok: false,
++  category,
++  error,
++  ...(status == null ? {} : { status }),
++  retriable: category === 'network' || (category === 'http' && transientHttp.has(status ?? 0)),
++  blocksFurtherRequests: category === 'malformed' || blockingHttp.has(status ?? 0),
++  ...extra,
++})
++
++const safeGraphQlCode = (error: Record<string, unknown>): string | undefined => {
++  const extensions = isRecord(error.extensions) ? error.extensions : undefined
++  if (typeof extensions?.code === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(extensions.code)) {
++    return extensions.code
++  }
++  // Preserve the existing query-version compatibility signal without logging provider text.
++  if (typeof error.message === 'string') {
++    if (/PersistedQueryNotFound/i.test(error.message)) return 'PersistedQueryNotFound'
++    if (/PersistedQueryNotSupported/i.test(error.message)) return 'PersistedQueryNotSupported'
++    if (/not authenticated|unauthenticated|session expired/i.test(error.message)) return 'UNAUTHENTICATED'
++  }
++  return undefined
++}
++
++/** Treat HTTP status, envelope shape and GraphQL errors identically for single and batch requests. */
++export const normalizeFetchResult = <T>(result: TransportFetchResult): GraphQlResult<T> => {
++  const status = result.status
++  if (status != null && (!Number.isInteger(status) || status < 100 || status > 599)) {
++    return failure('malformed', 'Invalid HTTP status')
++  }
++  if (status != null && blockingHttp.has(status)) return failure('http', `HTTP ${status}`, status)
++  if (!result.ok && result.category === 'malformed') {
++    return failure('malformed', 'Malformed JSON response', status)
++  }
++  if (status != null && (status < 200 || status >= 300)) {
++    return failure('http', `HTTP ${status}`, status)
++  }
++  if (!result.ok) {
++    const category = result.category === 'malformed' || status != null ? 'malformed' : 'network'
++    return failure(category, category === 'network' ? 'Network request failed' : 'Malformed JSON response', status)
++  }
++  if (status == null || !isRecord(result.data)) {
++    return failure('malformed', 'Malformed GraphQL response', status)
++  }
++  const payload = result.data
++  if (Object.hasOwn(payload, 'errors') && (!Array.isArray(payload.errors) || !payload.errors.every(isRecord))) {
++    return failure('malformed', 'Malformed GraphQL errors', status)
++  }
++  if (Array.isArray(payload.errors) && payload.errors.length) {
++    const codes = [...new Set(payload.errors.map(safeGraphQlCode).filter((code): code is string => Boolean(code)))]
++    const code = codes[0]
++    const blocksFurtherRequests = codes.some((value) => /^(UNAUTHENTICATED|FORBIDDEN|UNAUTHORIZED|RATE_LIMITED|TOO_MANY_REQUESTS)$/i.test(value))
++    return failure('graphql', `GraphQL error${codes.length ? ` (${codes.join(', ')})` : ''}`, status, {
++      ...(code ? { code } : {}), blocksFurtherRequests,
++    })
++  }
++  if (!Object.hasOwn(payload, 'data') || !isRecord(payload.data)) {
++    return failure('malformed', 'Missing GraphQL data', status)
++  }
++  return { ok: true, status, data: payload as T }
++}
++
++export const asResponseError = (failure: GraphQlFailure): AirFranceResponseError => (
++  new AirFranceResponseError(failure)
++)
+diff --git a/server/af/reward-explore.ts b/server/af/reward-explore.ts
+index 61e9640fc9f0dbbac5f1c618bbea70ee3ea2e679..199103bd2ef641d7f748b4f6aa4ef2fb354e9508 100644
+--- a/server/af/reward-explore.ts
++++ b/server/af/reward-explore.ts
+@@ -1,22 +1,15 @@
+ import type { SearchRequest } from '../../src/types.js'
+ import { withRecoveredCollector, withTransportLock } from './browser.js'
+ import { loadExploreMonthsFromHorizon } from './explore-chunks.js'
+-import { CACHE_TTL_MS, RATLINE_LOWEST_FARE_HASH } from './hashes.js'
+-import { parseMonthlyFares } from './parsers.js'
++import { exploreCacheKey, rewardExploreCache } from './explore-cache.js'
++import { RATLINE_LOWEST_FARE_HASH } from './hashes.js'
++import { parseLowestFarePayload, parseMonthlyFares } from './parsers.js'
+ import { prepareRewardSession, rewardTransportOptions } from './reward-session.js'
+ import { warmAkamaiSession } from './session-warm.js'
+ import { postGraphQlWithRetry } from './transport.js'
+ import type { ExploreCapture, LowestFarePayload } from './types.js'
+ import { lowestFareVariables, monthBounds, monthlyInterval } from './variables.js'
+ 
+-const exploreCache = new Map<string, { capture: ExploreCapture; expiresAt: number }>()
+-const exploreInFlight = new Map<string, Promise<ExploreCapture>>()
+-
+-const exploreKey = (request: SearchRequest): string => [
+-  'explore', 'REWARD', request.origin.code, request.destination.code,
+-  request.adults, [...request.cabins].sort().join(','),
+-].join('|')
+-
+ const executeRewardExplore = async (request: SearchRequest): Promise<ExploreCapture> => (
+   withTransportLock(() => withRecoveredCollector(async (page) => {
+     await warmAkamaiSession(page)
+@@ -39,7 +32,7 @@ const executeRewardExplore = async (request: SearchRequest): Promise<ExploreCapt
+       rewardTransportOptions,
+     )
+     const monthlySeeds = parseMonthlyFares(
+-      monthlyPayload.data?.lowestFareOffers?.lowestOffers ?? [],
++      parseLowestFarePayload(monthlyPayload, 'REWARD'),
+       'REWARD',
+     )
+     const months = await loadExploreMonthsFromHorizon(
+@@ -57,7 +50,7 @@ const executeRewardExplore = async (request: SearchRequest): Promise<ExploreCapt
+           ),
+           rewardTransportOptions,
+         )
+-        return dailyPayload.data?.lowestFareOffers?.lowestOffers ?? []
++        return parseLowestFarePayload(dailyPayload, 'REWARD')
+       },
+       async (seed) => {
+         const [firstDate, lastDate] = monthBounds(seed.month)
+@@ -70,7 +63,7 @@ const executeRewardExplore = async (request: SearchRequest): Promise<ExploreCapt
+           ),
+           rewardTransportOptions,
+         )
+-        return dailyPayload.data?.lowestFareOffers?.lowestOffers ?? []
++        return parseLowestFarePayload(dailyPayload, 'REWARD')
+       },
+     )
+ 
+@@ -81,19 +74,10 @@ const executeRewardExplore = async (request: SearchRequest): Promise<ExploreCapt
+ export const exploreRewardFares = async (
+   request: SearchRequest,
+ ): Promise<ExploreCapture & { cacheHit: boolean }> => {
+-  const key = exploreKey(request)
+-  const cached = exploreCache.get(key)
+-  if (cached && cached.expiresAt > Date.now()) return { ...cached.capture, cacheHit: true }
+-  if (cached) exploreCache.delete(key)
+-  const active = exploreInFlight.get(key)
+-  if (active) return { ...await active, cacheHit: true }
+-  const exploration = executeRewardExplore(request)
+-  exploreInFlight.set(key, exploration)
+-  try {
+-    const capture = await exploration
+-    exploreCache.set(key, { capture, expiresAt: Date.now() + CACHE_TTL_MS })
+-    return { ...capture, cacheHit: false }
+-  } finally {
+-    exploreInFlight.delete(key)
+-  }
++  const query = structuredClone(request)
++  const { capture, cacheHit } = await rewardExploreCache.getOrLoad(
++    exploreCacheKey('REWARD', query),
++    () => executeRewardExplore(query),
++  )
++  return { ...capture, cacheHit }
+ }
+diff --git a/server/af/reward-session.ts b/server/af/reward-session.ts
+index a4df5b6f97c1836bd557cc9ec3b9ad8a14203083..d7405dc82988c65f024af7e6763f71534808a0f0 100644
+--- a/server/af/reward-session.ts
++++ b/server/af/reward-session.ts
+@@ -1,7 +1,7 @@
+ import { randomUUID } from 'node:crypto'
+ import type { Page } from 'patchright'
+ import type { SearchRequest } from '../../src/types.js'
+-import { navigateAirFrance, refreshCollectorPage } from './browser.js'
++import { navigateAirFrance } from './browser.js'
+ import {
+   CLIENT_REVISION,
+   COLLECTOR_PAGE,
+@@ -9,7 +9,9 @@ import {
+   CREATE_SEARCH_CONTEXT_HASH,
+   SEARCH_CUSTOMER_HASH,
+ } from './hashes.js'
++import { dataError, recordValue } from './data-validation.js'
+ import { FlyingBlueAuthError } from './hashcash.js'
++import { AirFranceResponseError } from './response-validation.js'
+ import { postGraphQlWithRetry } from './transport.js'
+ import type {
+   CreateSearchContextPayload,
+@@ -26,7 +28,7 @@ export const rewardTransportOptions = {
+   revision: CLIENT_REVISION,
+ }
+ 
+-const normalizeTravelers = (raw: unknown): Array<{ travelerKey?: number; travelerSource?: string }> => {
++const normalizeTravelers = (raw: unknown): unknown[] => {
+   if (Array.isArray(raw)) return raw
+   if (!raw || typeof raw !== 'object') return []
+   const record = raw as Record<string, unknown>
+@@ -42,16 +44,22 @@ const normalizeTravelers = (raw: unknown): Array<{ travelerKey?: number; travele
+ }
+ 
+ const companionsFromContext = (travelers: unknown, adults: number): TravelCompanion[] => {
+-  const usable = normalizeTravelers(travelers).filter((traveler) => traveler.travelerKey != null)
++  const usable = normalizeTravelers(travelers).map((value) => recordValue(value, 'traveler profile'))
+   if (!usable.length) {
+     throw new FlyingBlueAuthError(
+       'Aucun voyageur Flying Blue dans le profil. Ouvrez une recherche Miles sur airfrance.fr une fois, puis réessayez.',
+     )
+   }
+-  return usable.slice(0, adults).map((traveler, index) => ({
++  if (usable.length < adults) throw dataError('Insufficient traveler profiles')
++  const selected = usable.slice(0, adults)
++  if (selected.some((traveler) => typeof traveler.travelerKey !== 'number' || !Number.isSafeInteger(traveler.travelerKey) || traveler.travelerKey < 0)) {
++    throw dataError('Invalid traveler reference')
++  }
++  if (new Set(selected.map((traveler) => traveler.travelerKey)).size !== selected.length) throw dataError('Duplicate traveler reference')
++  return selected.map((traveler, index) => ({
+     passengerId: index + 1,
+     travelerKey: Number(traveler.travelerKey),
+-    travelerSource: traveler.travelerSource ?? 'PROFILE',
++    travelerSource: typeof traveler.travelerSource === 'string' && traveler.travelerSource ? traveler.travelerSource : 'PROFILE',
+   }))
+ }
+ 
+@@ -80,6 +88,10 @@ export const prepareRewardSession = async (
+     }
+   } catch (error) {
+     if (error instanceof FlyingBlueAuthError) throw error
++    if (error instanceof AirFranceResponseError) {
++      if (error.status === 401 || /^(UNAUTHENTICATED|UNAUTHORIZED)$/i.test(error.code ?? '')) throw new FlyingBlueAuthError('Flying Blue authentication required')
++      throw error
++    }
+     const message = error instanceof Error ? error.message : String(error)
+     if (/401|not authenticated|Flying Blue|CustomerAPI/i.test(message)) {
+       throw new FlyingBlueAuthError(message)
+@@ -87,25 +99,13 @@ export const prepareRewardSession = async (
+     throw error
+   }
+ 
+-  let context: CreateSearchContextPayload
+-  try {
+-    context = await postGraphQlWithRetry<CreateSearchContextPayload>(
+-      page,
+-      'SharedSearchCreateSearchContextForSearchQuery',
+-      CREATE_SEARCH_CONTEXT_HASH,
+-      { searchStateUuid },
+-      { withHashcash: false, useRewardHeaders: true, revision: CLIENT_REVISION },
+-    )
+-  } catch {
+-    await refreshCollectorPage(page)
+-    context = await postGraphQlWithRetry<CreateSearchContextPayload>(
+-      page,
+-      'SharedSearchCreateSearchContextForSearchQuery',
+-      CREATE_SEARCH_CONTEXT_HASH,
+-      { searchStateUuid },
+-      rewardTransportOptions,
+-    )
+-  }
++  const context = await postGraphQlWithRetry<CreateSearchContextPayload>(
++    page,
++    'SharedSearchCreateSearchContextForSearchQuery',
++    CREATE_SEARCH_CONTEXT_HASH,
++    { searchStateUuid },
++    { withHashcash: false, useRewardHeaders: true, revision: CLIENT_REVISION },
++  )
+   const companions = companionsFromContext(
+     context.data?.createSearchContext?.possibleTravelersFromProfile,
+     request.adults,
+diff --git a/server/af/reward.ts b/server/af/reward.ts
+index 92c5d914a550b2ca78c18861b5914ebd75856a4d..9abc2ad70d7b72cda0d01b26deea828edaf775f7 100644
+--- a/server/af/reward.ts
++++ b/server/af/reward.ts
+@@ -2,14 +2,15 @@ import type { FareCalendarItem, RawOffer, SearchRequest } from '../../src/types.
+ import { withRecoveredCollector, withTransportLock } from './browser.js'
+ import { warmAkamaiSession } from './session-warm.js'
+ import {
+-  CACHE_TTL_MS,
+   CLIENT_REVISION,
+   RATLINE_AVAILABLE_OFFERS_HASH,
+   RATLINE_LOWEST_FARE_HASH,
+ } from './hashes.js'
+ import { FlyingBlueAuthError } from './hashcash.js'
+-import { parseAvailableOffers, parseMonthlyFares, selectExactCandidates } from './parsers.js'
++import { exploreCacheKey, rewardSearchCache } from './explore-cache.js'
++import { parseAvailableOffers, parseLowestFarePayload, parseMonthlyFares, selectExactCandidates } from './parsers.js'
+ import { prepareRewardSession, rewardTransportOptions } from './reward-session.js'
++import { AirFranceResponseError, asResponseError } from './response-validation.js'
+ import { buildGraphQlBody, postGraphQlBatch, postGraphQlWithRetry } from './transport.js'
+ import type { AvailableOffersPayload, LowestFarePayload, SearchCapture } from './types.js'
+ import {
+@@ -20,15 +21,6 @@ import {
+   monthlyInterval,
+ } from './variables.js'
+ 
+-const cache = new Map<string, { capture: SearchCapture; expiresAt: number }>()
+-const inFlight = new Map<string, Promise<SearchCapture>>()
+-
+-const requestKey = (request: SearchRequest): string => [
+-  'REWARD',
+-  request.origin.code, request.destination.code, request.departureDate, request.returnDate,
+-  request.flexibleDays, request.tripLengthDays, request.adults, [...request.cabins].sort().join(','),
+-].join('|')
+-
+ const executeRewardSearch = async (request: SearchRequest): Promise<SearchCapture> => (
+   withTransportLock(() => withRecoveredCollector(async (page) => {
+     await warmAkamaiSession(page)
+@@ -52,7 +44,7 @@ const executeRewardSearch = async (request: SearchRequest): Promise<SearchCaptur
+       rewardTransportOptions,
+     )
+     const monthlyCalendar = parseMonthlyFares(
+-      monthlyPayload.data?.lowestFareOffers?.lowestOffers ?? [],
++      parseLowestFarePayload(monthlyPayload, 'REWARD'),
+       'REWARD',
+     )
+ 
+@@ -76,7 +68,7 @@ const executeRewardSearch = async (request: SearchRequest): Promise<SearchCaptur
+       candidates = selectExactCandidates(
+         request,
+         candidates,
+-        preliminary.data?.lowestFareOffers?.lowestOffers ?? [],
++        parseLowestFarePayload(preliminary, 'REWARD'),
+       )
+     }
+ 
+@@ -94,12 +86,17 @@ const executeRewardSearch = async (request: SearchRequest): Promise<SearchCaptur
+     const offers: RawOffer[] = []
+     const fareCalendar: FareCalendarItem[] = []
+     const warnings: string[] = []
++    let lastFailure: Error | undefined
+     for (let index = 0; index < candidates.length; index += 1) {
+       const candidate = candidates[index]
+       const result = batch[index]
+-      if (!result?.ok || !result.data) {
+-        if (candidates.length === 1) throw new FlyingBlueAuthError(result?.error)
+-        if (result?.error) warnings.push(result.error.slice(0, 160))
++      if (!result) throw new Error('Missing batch query result')
++      if (!result.ok) {
++        const error = asResponseError(result)
++        if (error.status === 401 || error.code === 'UNAUTHENTICATED') throw new FlyingBlueAuthError()
++        if (error.blocksFurtherRequests || candidates.length === 1) throw error
++        lastFailure = error
++        warnings.push(`${candidate.departureDate}: ${error.message}`)
+         continue
+       }
+       try {
+@@ -119,16 +116,13 @@ const executeRewardSearch = async (request: SearchRequest): Promise<SearchCaptur
+           })
+         }
+       } catch (error) {
+-        const detail = error instanceof Error ? error.message.slice(0, 160) : 'erreur Miles'
+-        warnings.push(`${candidate.departureDate}: ${detail}`)
+-        if (candidates.length === 1) {
+-          throw new FlyingBlueAuthError(error instanceof Error ? error.message : undefined)
+-        }
++        if (error instanceof AirFranceResponseError && error.blocksFurtherRequests) throw error
++        lastFailure = error instanceof Error ? error : new Error('Invalid reward offer response')
++        warnings.push(`${candidate.departureDate}: reward offer response failed`)
++        if (candidates.length === 1) throw lastFailure
+       }
+     }
+-    if (!offers.length && warnings.length) {
+-      warnings.unshift('Air France n’a renvoyé aucune offre Miles exploitable.')
+-    }
++    if (!offers.length && lastFailure) throw lastFailure
+ 
+     return {
+       offers,
+@@ -144,19 +138,9 @@ const executeRewardSearch = async (request: SearchRequest): Promise<SearchCaptur
+ export const searchRewardOffers = async (
+   request: SearchRequest,
+ ): Promise<SearchCapture & { cacheHit: boolean }> => {
+-  const key = requestKey(request)
+-  const cached = cache.get(key)
+-  if (cached && cached.expiresAt > Date.now()) return { ...cached.capture, cacheHit: true }
+-  if (cached) cache.delete(key)
+-  const active = inFlight.get(key)
+-  if (active) return { ...await active, cacheHit: true }
+-  const search = executeRewardSearch(request)
+-  inFlight.set(key, search)
+-  try {
+-    const capture = await search
+-    cache.set(key, { capture, expiresAt: Date.now() + CACHE_TTL_MS })
+-    return { ...capture, cacheHit: false }
+-  } finally {
+-    inFlight.delete(key)
+-  }
++  const query = structuredClone(request)
++  const { capture, cacheHit } = await rewardSearchCache.getOrLoad(
++    exploreCacheKey('REWARD', query), () => executeRewardSearch(query),
++  )
++  return { ...capture, cacheHit }
+ }
+diff --git a/server/af/search-validation.test.ts b/server/af/search-validation.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..0ac86dea8343e9193a525f35c1bbf24284b8e635
+--- /dev/null
++++ b/server/af/search-validation.test.ts
+@@ -0,0 +1,197 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++import type { Page } from 'patchright'
++import type { ExploreMonthItem, RawOffer, SearchRequest } from '../../src/types.js'
++import type { AvailableOffersPayload } from './types.js'
++import { AirFranceResponseError, normalizeFetchResult } from './response-validation.js'
++import type { GraphQlResult } from './response-validation.js'
++
++const mocked = vi.hoisted(() => ({
++  refresh: vi.fn(),
++  wait: vi.fn(async () => undefined),
++  batch: vi.fn(),
++  request: vi.fn(),
++  parse: vi.fn(),
++}))
++
++vi.mock('./browser.js', () => ({
++  withTransportLock: async (work: () => Promise<unknown>) => work(),
++  withRecoveredCollector: async (work: (page: unknown) => Promise<unknown>) => work({ waitForTimeout: mocked.wait }),
++  refreshCollectorPage: mocked.refresh,
++}))
++vi.mock('./session-warm.js', () => ({ warmAkamaiSession: vi.fn() }))
++vi.mock('./reward-session.js', () => ({
++  prepareRewardSession: vi.fn(async () => ({ searchStateUuid: 'offline', companions: [] })),
++  rewardTransportOptions: {},
++}))
++vi.mock('./transport.js', () => ({
++  buildGraphQlBody: vi.fn(() => ({})),
++  postGraphQlBatch: mocked.batch,
++  postGraphQlWithRetry: mocked.request,
++}))
++vi.mock('./parsers.js', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('./parsers.js')>()
++  return { ...actual, parseAvailableOffers: mocked.parse }
++})
++
++import { searchCashOffers } from './cash.js'
++import { searchRewardOffers } from './reward.js'
++import { loadExploreMonths } from './explore-chunks.js'
++import { invalidateQueryCaches } from './explore-cache.js'
++import { FlyingBlueAuthError } from './hashcash.js'
++
++const station = (code: string) => ({
++  code, cityCode: code, cityName: code, countryName: 'Test', displayText: code,
++  stationType: 'AIRPORT', isOrigin: true, isDestination: true,
++})
++
++const request = (overrides: Partial<SearchRequest> = {}): SearchRequest => ({
++  origin: station('NCE'), destination: station('RUN'),
++  departureDate: '2026-12-07', returnDate: '2026-12-17',
++  flexibleDays: 0, tripLengthDays: 10, cabins: ['ECONOMY'], paymentMode: 'cash', adults: 1,
++  maxStops: 2, maxDurationHours: 48, nearbyAirports: true, separateTickets: false,
++  longLayover: false, mileValueCents: 1.2, ...overrides,
++})
++
++const offer: RawOffer = {
++  id: 'offline', segments: [], prices: [{ cabin: 'ECONOMY', cash: 500, miles: 95000, taxes: 100 }],
++  source: 'live', verifiedAt: '2026-10-31T00:00:00Z', singleTicket: true, bagsIncluded: null,
++}
++const success = (): GraphQlResult<AvailableOffersPayload> => ({
++  ok: true, status: 200, data: { data: { availableOffers: { offerItineraries: [] } } },
++})
++const failed = (status: number): GraphQlResult<AvailableOffersPayload> => normalizeFetchResult({
++  ok: true, status, data: { message: 'provider failure' },
++})
++const malformed = () => new AirFranceResponseError({
++  ok: false, category: 'malformed', error: 'Invalid offer response',
++  retriable: false, blocksFurtherRequests: true,
++})
++
++beforeEach(() => {
++  vi.useFakeTimers({ toFake: ['Date'] })
++  vi.setSystemTime(new Date('2026-10-31T00:00:00Z'))
++  invalidateQueryCaches()
++  mocked.refresh.mockReset()
++  mocked.wait.mockReset().mockResolvedValue(undefined)
++  mocked.batch.mockReset().mockResolvedValue([success()])
++  mocked.request.mockReset().mockResolvedValue({ data: { lowestFareOffers: { lowestOffers: [] } } })
++  mocked.parse.mockReset().mockReturnValue([structuredClone(offer)])
++})
++
++afterEach(() => vi.useRealTimers())
++
++describe('search failure classification', () => {
++  it.each([401, 403, 429, 503])('cash HTTP %s is an error, never an empty successful result', async (status) => {
++    mocked.batch.mockResolvedValue([failed(status)])
++    await expect(searchCashOffers(request())).rejects.toMatchObject({ name: 'AirFranceResponseError', status })
++    expect(mocked.batch).toHaveBeenCalledTimes(1)
++    expect(mocked.parse).not.toHaveBeenCalled()
++  })
++
++  it.each([403, 429, 503])('reward HTTP %s is preserved instead of mislabeled authentication failure', async (status) => {
++    mocked.batch.mockResolvedValue([failed(status)])
++    await expect(searchRewardOffers(request({ paymentMode: 'miles' }))).rejects.toMatchObject({ name: 'AirFranceResponseError', status })
++    expect(mocked.batch).toHaveBeenCalledTimes(1)
++  })
++
++  it('reward HTTP 401 still prompts authentication', async () => {
++    mocked.batch.mockResolvedValue([failed(401)])
++    await expect(searchRewardOffers(request({ paymentMode: 'miles' }))).rejects.toBeInstanceOf(FlyingBlueAuthError)
++  })
++
++  it.each(['cash', 'miles'] as const)('%s malformed payload has no fallback network replay', async (paymentMode) => {
++    mocked.parse.mockImplementation(() => { throw malformed() })
++    const search = paymentMode === 'cash' ? searchCashOffers : searchRewardOffers
++    await expect(search(request({ paymentMode }))).rejects.toMatchObject({ category: 'malformed' })
++    expect(mocked.batch).toHaveBeenCalledTimes(1)
++    expect(mocked.refresh).not.toHaveBeenCalled()
++  })
++
++  it.each(['cash', 'miles'] as const)('%s failed flexible search is rejected rather than cached as no seats', async (paymentMode) => {
++    mocked.batch.mockResolvedValue([failed(503), failed(503), failed(503)])
++    const search = paymentMode === 'cash' ? searchCashOffers : searchRewardOffers
++    const query = request({ paymentMode, flexibleDays: 1 })
++    await expect(search(query)).rejects.toMatchObject({ status: 503 })
++    await expect(search(query)).rejects.toMatchObject({ status: 503 })
++    expect(mocked.batch).toHaveBeenCalledTimes(2)
++  })
++
++  it.each(['cash', 'miles'] as const)('%s partial success is returned with warnings and is not cached', async (paymentMode) => {
++    mocked.batch.mockResolvedValue([success(), failed(503), success()])
++    const search = paymentMode === 'cash' ? searchCashOffers : searchRewardOffers
++    const query = request({ paymentMode, flexibleDays: 1 })
++    const first = await search(query)
++    const second = await search(query)
++    expect(first.offers).toHaveLength(2)
++    expect(first.warnings).toHaveLength(1)
++    expect(first.cacheHit).toBe(false)
++    expect(second.cacheHit).toBe(false)
++    expect(mocked.batch).toHaveBeenCalledTimes(2)
++  })
++
++  it.each(['cash', 'miles'] as const)('%s confirmed empty success can be cached', async (paymentMode) => {
++    mocked.parse.mockReturnValue([])
++    const search = paymentMode === 'cash' ? searchCashOffers : searchRewardOffers
++    const query = request({ paymentMode })
++    const first = await search(query)
++    const second = await search(query)
++    expect(first.offers).toEqual([])
++    expect(first.warnings).toEqual([])
++    expect(second.cacheHit).toBe(true)
++    expect(mocked.batch).toHaveBeenCalledTimes(1)
++  })
++
++  it.each(['cash', 'miles'] as const)('%s session invalidation forces a fresh search', async (paymentMode) => {
++    const search = paymentMode === 'cash' ? searchCashOffers : searchRewardOffers
++    const query = request({ paymentMode })
++    await search(query)
++    invalidateQueryCaches()
++    const second = await search(query)
++    expect(second.cacheHit).toBe(false)
++    expect(mocked.batch).toHaveBeenCalledTimes(2)
++  })
++
++  it.each(['cash', 'miles'] as const)('%s snapshots the request before asynchronous work starts', async (paymentMode) => {
++    const search = paymentMode === 'cash' ? searchCashOffers : searchRewardOffers
++    const query = request({ paymentMode })
++    const pending = search(query)
++    query.origin.code = 'CDG'
++    query.departureDate = '2027-01-01'
++    await pending
++    const variables = mocked.request.mock.calls[0][3]
++    expect(variables.lowestFareOffersRequest.requestedConnections[0].origin.code).toBe('NCE')
++    expect(variables.lowestFareOffersRequest.requestedConnections[0].departureDate).toBe('2026-12-07')
++    expect((await search(request({ paymentMode }))).cacheHit).toBe(true)
++  })
++})
++
++describe('Explorer gap fill respects the transport retry budget', () => {
++  const page = { waitForTimeout: mocked.wait } as unknown as Page
++  const seeds = ['2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05']
++    .map((month) => ({ month, label: month }))
++
++  it.each([403, 429, 503])('does not refresh and replay HTTP %s', async (status) => {
++    const result = failed(status)
++    if (result.ok) throw new Error('Invalid test fixture')
++    const error = new AirFranceResponseError(result)
++    const load = vi.fn(async () => { throw error })
++    await expect(loadExploreMonths(page, seeds.slice(0, 1), load)).rejects.toBe(error)
++    expect(load).toHaveBeenCalledTimes(1)
++    expect(mocked.refresh).not.toHaveBeenCalled()
++  })
++
++  it('stops scheduling new months after a loader failure', async () => {
++    const load = vi.fn(async () => { throw malformed() })
++    await expect(loadExploreMonths(page, seeds, load)).rejects.toMatchObject({ category: 'malformed' })
++    expect(load.mock.calls.length).toBeLessThanOrEqual(3)
++    expect(mocked.refresh).not.toHaveBeenCalled()
++  })
++
++  it('keeps successful months ordered and permits a confirmed empty month', async () => {
++    const load = vi.fn(async (seed: { month: string; label: string }): Promise<ExploreMonthItem | undefined> => (
++      seed.month === '2027-01' ? undefined : { ...seed, cashTop3: [], milesTop3: [] }
++    ))
++    const result = await loadExploreMonths(page, seeds, load)
++    expect(result.map((month) => month.month)).toEqual(seeds.map((seed) => seed.month).filter((month) => month !== '2027-01'))
++  })
++})
+diff --git a/server/af/session-validation.test.ts b/server/af/session-validation.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..02a351a3d496d535edafac0f101c8c000ad0b585
+--- /dev/null
++++ b/server/af/session-validation.test.ts
+@@ -0,0 +1,101 @@
++import type { Page } from 'patchright'
++import { beforeEach, describe, expect, it, vi } from 'vitest'
++const mocks = vi.hoisted(() => ({ post: vi.fn(), retry: vi.fn(), navigate: vi.fn(), addCookies: vi.fn(), read: vi.fn(), fetch: vi.fn() }))
++vi.mock('node:fs/promises', async (original) => ({ ...await original<typeof import('node:fs/promises')>(), readFile: mocks.read }))
++vi.mock('./transport.js', () => ({ postGraphQl: mocks.post, postGraphQlWithRetry: mocks.retry }))
++vi.mock('./browser.js', async (original) => ({
++  ...await original<typeof import('./browser.js')>(),
++  navigateAirFrance: mocks.navigate,
++  withTransportLock: async (fn: () => Promise<unknown>) => fn(),
++  withRecoveredCollector: async (fn: (page: Page) => Promise<unknown>) => fn({
++    url: () => 'https://wwws.airfrance.fr/search/offline-test', bringToFront: async () => {},
++    context: () => ({ cookies: async () => [] }),
++  } as unknown as Page),
++  getBrowserContext: async () => ({ addCookies: mocks.addCookies }),
++}))
++import { cashExploreCache, cashSearchCache, invalidateQueryCaches, rewardExploreCache, rewardSearchCache } from './explore-cache.js'
++import { confirmFlyingBlueSession, isFlyingBlueAuthenticated, openFlyingBlueLogin } from './auth-login.js'
++import { importFlyingBlueSession } from './session.js'
++import { closeAirFranceTransport } from './browser.js'
++import { prepareRewardSession } from './reward-session.js'
++import { AirFranceResponseError } from './response-validation.js'
++import { FlyingBlueAuthError } from './hashcash.js'
++import { prewarmCollector, warmAkamaiSession } from './session-warm.js'
++import type { SearchRequest } from '../../src/types.js'
++
++const page = { url: () => 'https://wwws.airfrance.fr/search/offline-test' } as Page
++const request = { adults: 1, cabins: ['ECONOMY'], origin: { code: 'ICN', stationType: 'AIRPORT' }, destination: { code: 'CDG', stationType: 'AIRPORT' }, departureDate: '2099-12-01', returnDate: '2099-12-11' } as SearchRequest
++const failure = (status: number) => new AirFranceResponseError({ ok: false, error: `HTTP ${status}`, status, category: 'http', retriable: status === 503, blocksFurtherRequests: status !== 503 })
++const caches = [cashExploreCache, rewardExploreCache, cashSearchCache, rewardSearchCache] as const
++const loader = () => ({ months: [], operations: [], offers: [], fareCalendar: [], monthlyCalendar: [], candidatePairs: 1 })
++
++beforeEach(() => {
++  vi.clearAllMocks(); invalidateQueryCaches()
++  mocks.post.mockResolvedValue({ data: { customer: {} } })
++  mocks.read.mockResolvedValue(JSON.stringify([{ name: 'offline-fixture', value: 'not-a-real-session', domain: '.airfrance.fr' }]))
++  mocks.retry.mockImplementation(async (_page: unknown, operation: string) => operation === 'SharedSearchCreateSearchContextForSearchQuery'
++    ? { data: { createSearchContext: { possibleTravelersFromProfile: [{ travelerKey: 42 }] } } }
++    : { data: { customer: {} } })
++})
++
++describe('session boundaries', () => {
++  it.each([
++    ['open', () => openFlyingBlueLogin()], ['status', () => isFlyingBlueAuthenticated()],
++    ['confirm', () => confirmFlyingBlueSession()], ['import fixture', () => importFlyingBlueSession('/offline-fixture.json')],
++    ['close', () => closeAirFranceTransport()],
++  ] as const)('%s invalidates all query caches', async (_name, boundary) => {
++    for (const cache of caches) await cache.getOrLoad('same', async () => loader())
++    await boundary()
++    for (const cache of caches) expect((await cache.getOrLoad('same', async () => loader())).cacheHit).toBe(false)
++  })
++  it('does no background network requests or navigation', async () => {
++    vi.stubGlobal('fetch', mocks.fetch)
++    try {
++      await warmAkamaiSession(page); await prewarmCollector()
++      expect(mocks.navigate).not.toHaveBeenCalled(); expect(mocks.fetch).not.toHaveBeenCalled()
++    } finally { vi.unstubAllGlobals() }
++  })
++  it.each([403, 429, 503])('preserves HTTP%i from account checking', async (status) => {
++    mocks.post.mockRejectedValue(failure(status))
++    await expect(isFlyingBlueAuthenticated()).rejects.toMatchObject({ status })
++    expect(mocks.post).toHaveBeenCalledTimes(1)
++  })
++  it('maps HTTP401 to an expired authentication state', async () => {
++    mocks.post.mockRejectedValue(failure(401))
++    await expect(isFlyingBlueAuthenticated()).resolves.toBe(false)
++  })
++  it.each([false, true])('clears results created during cookie import, including failure=%j', async (fail) => {
++    let finish!: () => void
++    const pending = new Promise<void>((resolve) => { finish = resolve })
++    mocks.addCookies.mockImplementationOnce(async () => { await pending; if (fail) throw new Error('fixture import failed') })
++    const result = importFlyingBlueSession('/offline-fixture.json').then(() => null, (error: unknown) => error)
++    await vi.waitFor(() => expect(mocks.addCookies).toHaveBeenCalledTimes(1))
++    for (const cache of caches) await cache.getOrLoad('race', async () => loader())
++    finish()
++    expect(await result).toEqual(fail ? expect.any(Error) : null)
++    for (const cache of caches) expect((await cache.getOrLoad('race', async () => loader())).cacheHit).toBe(false)
++  })
++
++})
++
++describe('reward preparation does not reissue rejected operations', () => {
++  it.each([401, 403, 429, 503])('never repeats CreateSearchContext after HTTP%i', async (status) => {
++    mocks.retry.mockResolvedValueOnce({ data: { customer: {} } }).mockRejectedValueOnce(failure(status))
++    await expect(prepareRewardSession(page, request)).rejects.toMatchObject({ status })
++    expect(mocks.retry).toHaveBeenCalledTimes(2)
++    expect(mocks.navigate).not.toHaveBeenCalled()
++  })
++  it('only missing authentication becomes an auth error', async () => {
++    mocks.retry.mockRejectedValue(failure(401))
++    await expect(prepareRewardSession(page, request)).rejects.toBeInstanceOf(FlyingBlueAuthError)
++  })
++  it.each([NaN, -1, 1.5, '', null, 'not-a-number'])('rejects malformed member references: %j', async (travelerKey) => {
++    mocks.retry.mockResolvedValueOnce({ data: { customer: {} } }).mockResolvedValueOnce({ data: { createSearchContext: { possibleTravelersFromProfile: [{ travelerKey }] } } })
++    await expect(prepareRewardSession(page, request)).rejects.toBeInstanceOf(AirFranceResponseError)
++    expect(mocks.retry).toHaveBeenCalledTimes(2)
++  })
++  it('refuses insufficient passenger profiles', async () => {
++    await expect(prepareRewardSession(page, { ...request, adults: 2 })).rejects.toThrow('Insufficient traveler profiles')
++    expect(mocks.retry).toHaveBeenCalledTimes(2)
++  })
++})
+diff --git a/server/af/session-warm.ts b/server/af/session-warm.ts
+index eb3b7ad2b608705bf89a7ae8159a5ae4835fb295..512c0fce343c1414bda1d1ef810d335d2b984038 100644
+--- a/server/af/session-warm.ts
++++ b/server/af/session-warm.ts
+@@ -1,65 +1,9 @@
+-import { randomUUID } from 'node:crypto'
+ import type { Page } from 'patchright'
+-import { refreshCollectorPage, withRecoveredCollector, withTransportLock } from './browser.js'
+-import { LOWEST_FARE_HASH } from './hashes.js'
+-import { isSessionWarm, markSessionWarm } from './session-state.js'
+-import { buildGraphQlBody, evaluateFetch } from './transport.js'
+ 
+-export { isSessionWarm, markSessionWarm } from './session-state.js'
+-
+-/**
+- * Best-effort Akamai warm-up. Never throws — a failed warm must not block pricing;
+- * postGraphQlWithRetry handles 403s with page refresh.
+- */
+-export const warmAkamaiSession = async (page: Page): Promise<boolean> => {
+-  if (isSessionWarm()) return true
+-
+-  const probe = buildGraphQlBody(
+-    'SharedSearchLowestFareOffersForSearchQuery',
+-    LOWEST_FARE_HASH,
+-    {
+-      lowestFareOffersRequest: {
+-        bookingFlow: 'LEISURE',
+-        withUpsellCabins: true,
+-        passengers: [{ id: 1, type: 'ADT' }],
+-        commercialCabins: ['ECONOMY'],
+-        type: 'MONTH',
+-        requestedConnections: [
+-          {
+-            departureDate: '2026-10-02',
+-            dateInterval: '2026-10-01/2027-09-30',
+-            origin: { type: 'AIRPORT', code: 'NCE' },
+-            destination: { type: 'AIRPORT', code: 'RUN' },
+-          },
+-          {
+-            dateInterval: null,
+-            origin: { type: 'AIRPORT', code: 'RUN' },
+-            destination: { type: 'AIRPORT', code: 'NCE' },
+-          },
+-        ],
+-      },
+-      activeConnection: 0,
+-      searchStateUuid: randomUUID(),
+-      bookingFlow: 'LEISURE',
+-    },
+-    false,
+-  )
+-
+-  for (let attempt = 0; attempt < 4; attempt += 1) {
+-    const result = await evaluateFetch(page, probe)
+-    if (result.ok && result.status != null && result.status < 400) {
+-      markSessionWarm()
+-      return true
+-    }
+-    await page.mouse.move(120 + attempt * 35, 180 + attempt * 25)
+-    await refreshCollectorPage(page)
+-    await page.waitForTimeout(1_500 + attempt * 1_000)
+-  }
+-  return false
++/** Compatibility hook: background navigation and challenge refresh loops are disabled. */
++export const warmAkamaiSession = async (page: Page): Promise<void> => {
++  void page
+ }
+ 
+-/** Open browser + warm Akamai at API boot so the first UI search is faster. */
+-export const prewarmCollector = async (): Promise<void> => withTransportLock(async () => {
+-  const ok = await withRecoveredCollector(async (page) => warmAkamaiSession(page))
+-  if (!ok) throw new Error('Warm-up Akamai non confirmé (la recherche retentera)')
+-})
++/** Starting the local API must not silently start an airline collection. */
++export const prewarmCollector = async (): Promise<void> => {}
+diff --git a/server/af/session.ts b/server/af/session.ts
+index 0ac8b68e371d0091536653ad033dc5015e434f94..d61c26882d6680fc546e5f3e71a069d3fedc70a3 100644
+--- a/server/af/session.ts
++++ b/server/af/session.ts
+@@ -1,6 +1,7 @@
+ import { readFile } from 'node:fs/promises'
+ import { resolve } from 'node:path'
+-import { getBrowserContext } from './browser.js'
++import { invalidateQueryCaches } from './explore-cache.js'
++import { getBrowserContext, withTransportLock } from './browser.js'
+ 
+ interface ExportedCookie {
+   name?: unknown
+@@ -61,7 +62,14 @@ export const importFlyingBlueSession = async (cookieFile: string): Promise<numbe
+     return cookie ? [cookie] : []
+   })
+   if (!cookies.length) throw new Error('Aucun cookie Air France valide dans le fichier')
+-  const context = await getBrowserContext()
+-  await context.addCookies(cookies)
+-  return cookies.length
++  return withTransportLock(async () => {
++    invalidateQueryCaches()
++    try {
++      const context = await getBrowserContext()
++      await context.addCookies(cookies)
++      return cookies.length
++    } finally {
++      invalidateQueryCaches()
++    }
++  })
+ }
+diff --git a/server/af/transport-errors.ts b/server/af/transport-errors.ts
+index 41ba259dc1f0681aa2ca774edef1ab3e48c96501..1f07590b8bfdbe55381922b3006c523c9b4a3358 100644
+--- a/server/af/transport-errors.ts
++++ b/server/af/transport-errors.ts
+@@ -12,9 +12,7 @@ export const describeAirFranceTransportError = (error: unknown): string => {
+   if (isAirFranceNetworkError(error)) {
+     return [
+       'Air France inaccessible (ERR_HTTP2 / timeout).',
+-      'Ratline va réinitialiser le profil navigateur si besoin.',
+-      'Si Brave ouvre https://wwws.airfrance.fr mais Ratline échoue encore,',
+-      'relancez l’API ; sinon changez de réseau (4G / VPN).',
++      'La requête a été interrompue ; le profil et les données déjà confirmées sont conservés.',
+     ].join(' ')
+   }
+   return message.slice(0, 240)
+diff --git a/server/af/transport-validation.test.ts b/server/af/transport-validation.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..e8a285b94b72bee64886bfe9adfe6954ec1ec1bd
+--- /dev/null
++++ b/server/af/transport-validation.test.ts
+@@ -0,0 +1,232 @@
++import type { Page } from 'patchright'
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import {
++  AirFranceResponseError,
++  normalizeFetchResult,
++  type TransportFetchResult,
++} from './response-validation.js'
++import {
++  buildGraphQlBody,
++  postGraphQl,
++  postGraphQlBatch,
++  postGraphQlWithRetry,
++  REQUEST_TIMEOUT_MS,
++} from './transport.js'
++
++const graphQlData = { data: { availableOffers: { offerItineraries: [] } } }
++const body = (operationName = 'Test') => buildGraphQlBody(operationName, 'offline-hash', {})
++
++const fakePage = () => {
++  const evaluate = vi.fn(async (fn: unknown, arg: unknown) => (
++    (fn as (value: unknown) => Promise<TransportFetchResult>)(arg)
++  ))
++  const waitForTimeout = vi.fn(async () => undefined)
++  return { page: { evaluate, waitForTimeout } as unknown as Page, evaluate, waitForTimeout }
++}
++
++const response = (status = 200, data: unknown = graphQlData): Response => new Response(
++  JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } },
++)
++
++afterEach(() => {
++  vi.unstubAllGlobals()
++  vi.restoreAllMocks()
++  vi.useRealTimers()
++})
++
++describe('HTTP and GraphQL result validation', () => {
++  it.each([401, 403, 429])('classifies HTTP %i as terminal and blocking, without exposing server data', (status) => {
++    const result = normalizeFetchResult({ ok: true, status, data: { message: 'private-token-do-not-log' } })
++    expect(result).toMatchObject({ ok: false, category: 'http', status, retriable: false, blocksFurtherRequests: true })
++    expect(JSON.stringify(result)).not.toContain('private-token-do-not-log')
++  })
++
++  it.each([408, 500, 502, 503, 504])('marks HTTP %i as retryable', (status) => {
++    expect(normalizeFetchResult({ ok: true, status, data: {} })).toMatchObject({
++      ok: false, category: 'http', status, retriable: true,
++    })
++  })
++
++  it.each([301, 400, 404, 409, 422, 501])('does not retry HTTP %i', (status) => {
++    expect(normalizeFetchResult({ ok: true, status, data: {} })).toMatchObject({ ok: false, retriable: false })
++  })
++
++  it.each([null, [], {}, { message: 'error' }, { data: null }, { data: [] }, { errors: null, data: {} },
++    { errors: 'bad', data: {} }, { errors: [null], data: {} }, { errors: [{}] }])(
++    'rejects invalid or error envelopes: %j', (data) => {
++      const result = normalizeFetchResult({ ok: true, status: 200, data })
++      expect(result.ok).toBe(false)
++      if (!result.ok) expect(result.retriable).toBe(false)
++    },
++  )
++
++  it.each([undefined, -1, 0, 99, 600, 200.5, Number.NaN])('rejects invalid/missing status %s', (status) => {
++    expect(normalizeFetchResult({ ok: true, status, data: graphQlData })).toMatchObject({ ok: false, category: 'malformed' })
++  })
++
++  it('accepts an explicit empty inventory in a valid GraphQL response', () => {
++    expect(normalizeFetchResult({ ok: true, status: 200, data: graphQlData })).toEqual({ ok: true, status: 200, data: graphQlData })
++  })
++
++  it('rejects partial data with GraphQL errors and preserves only safe code', () => {
++    expect(normalizeFetchResult({ ok: true, status: 200, data: {
++      data: { somePartialResult: true }, errors: [{ message: 'secret session data', extensions: { code: 'UNAUTHENTICATED' } }],
++    } })).toMatchObject({ ok: false, category: 'graphql', code: 'UNAUTHENTICATED', blocksFurtherRequests: true, retriable: false })
++  })
++
++  it('retains the query-version signal without storing provider messages', () => {
++    const result = normalizeFetchResult({ ok: true, status: 200, data: {
++      errors: [{ message: 'PersistedQueryNotFound private@example.com' }],
++    } })
++    expect(result).toMatchObject({ ok: false, code: 'PersistedQueryNotFound' })
++    expect(JSON.stringify(result)).not.toContain('private@example.com')
++  })
++})
++
++describe('single and batch requests use one policy', () => {
++  it('single request throws structured HTTP 503, while batch reports failure rather than empty inventory', async () => {
++    const { page } = fakePage()
++    const fetch = vi.fn(async () => response(503, { message: 'upstream unavailable' }))
++    vi.stubGlobal('fetch', fetch)
++    await expect(postGraphQl(page, 'Test', 'offline', {})).rejects.toMatchObject({
++      name: 'AirFranceResponseError', category: 'http', status: 503, retriable: true,
++    })
++    const [batch] = await postGraphQlBatch(page, [body()])
++    expect(batch).toMatchObject({ ok: false, status: 503, category: 'http' })
++    expect(batch).not.toHaveProperty('data')
++    expect(fetch).toHaveBeenCalledTimes(4)
++  })
++
++  it.each([401, 403, 429])('never refreshes or retries HTTP %i in single or batch, and skips queued requests', async (status) => {
++    const { page, waitForTimeout } = fakePage()
++    const fetch = vi.fn(async () => response(status))
++    vi.stubGlobal('fetch', fetch)
++    await expect(postGraphQlWithRetry(page, 'Test', 'offline', {})).rejects.toBeInstanceOf(AirFranceResponseError)
++    const batch = await postGraphQlBatch(page, [body(), body(), body(), body()])
++    expect(fetch).toHaveBeenCalledTimes(2)
++    expect(waitForTimeout).not.toHaveBeenCalled()
++    expect(batch).toHaveLength(4)
++    expect(batch.every((item) => !item.ok && item.status === status && !item.retriable)).toBe(true)
++  })
++
++  it('HTML HTTP 403 stops after one fetch, without trying an iframe', async () => {
++    const { page, evaluate } = fakePage()
++    const fetch = vi.fn(async () => new Response('<html>Access Denied</html>', { status: 403 }))
++    vi.stubGlobal('fetch', fetch)
++    await expect(postGraphQlWithRetry(page, 'Test', 'offline', {})).rejects.toMatchObject({ status: 403 })
++    expect(fetch).toHaveBeenCalledTimes(1)
++    expect(evaluate).toHaveBeenCalledTimes(1)
++  })
++
++  it('never retries an HTML response even when its status would otherwise be transient', async () => {
++    const { page, evaluate } = fakePage()
++    const fetch = vi.fn(async () => new Response('<html>Challenge</html>', { status: 503 }))
++    vi.stubGlobal('fetch', fetch)
++    await expect(postGraphQlWithRetry(page, 'Test', 'offline', {})).rejects.toMatchObject({
++      status: 503, category: 'malformed', retriable: false,
++    })
++    expect(fetch).toHaveBeenCalledTimes(1)
++    expect(evaluate).toHaveBeenCalledTimes(1)
++  })
++
++  it('retries a transient failure at most three times and never waits after final failure', async () => {
++    const { page, waitForTimeout } = fakePage()
++    const fetch = vi.fn(async () => response(503))
++    vi.stubGlobal('fetch', fetch)
++    await expect(postGraphQlWithRetry(page, 'Test', 'offline', {})).rejects.toMatchObject({ status: 503 })
++    expect(fetch).toHaveBeenCalledTimes(3)
++    expect(waitForTimeout.mock.calls).toEqual([[600], [1200]])
++  })
++
++  it('a transient failure can recover with no duplicate successful request', async () => {
++    const { page } = fakePage()
++    const fetch = vi.fn().mockResolvedValueOnce(response(503)).mockResolvedValueOnce(response())
++    vi.stubGlobal('fetch', fetch)
++    await expect(postGraphQlWithRetry(page, 'Test', 'offline', {})).resolves.toEqual(graphQlData)
++    expect(fetch).toHaveBeenCalledTimes(2)
++  })
++
++  it('does not retry or leak malformed JSON response bodies', async () => {
++    const { page } = fakePage()
++    const fetch = vi.fn(async () => new Response('invalid JSON private-token', { status: 200 }))
++    vi.stubGlobal('fetch', fetch)
++    await expect(postGraphQlWithRetry(page, 'Test', 'offline', {})).rejects.toMatchObject({ category: 'malformed', retriable: false })
++    expect(fetch).toHaveBeenCalledTimes(1)
++  })
++
++  it('GraphQL auth errors halt a batch without retrying or scheduling more requests', async () => {
++    const { page } = fakePage()
++    const fetch = vi.fn(async () => response(200, { errors: [{ extensions: { code: 'UNAUTHENTICATED' } }] }))
++    vi.stubGlobal('fetch', fetch)
++    const batch = await postGraphQlBatch(page, [body(), body(), body()])
++    expect(fetch).toHaveBeenCalledTimes(1)
++    expect(batch.every((item) => !item.ok && item.category === 'graphql')).toBe(true)
++  })
++
++  it('keeps concurrent batch output in input order', async () => {
++    const { page } = fakePage()
++    vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init: RequestInit) => {
++      const request = JSON.parse(String(init.body)) as { operationName: string }
++      await new Promise((resolve) => setTimeout(resolve, request.operationName === 'Second' ? 15 : 0))
++      return response(200, { data: { id: request.operationName } })
++    }))
++    const batch = await postGraphQlBatch<{ data: { id: string } }>(page, [body('First'), body('Second'), body('Third')])
++    expect(batch.map((item) => item.ok ? item.data.data.id : item.error)).toEqual(['First', 'Second', 'Third'])
++  })
++
++  it('cancels pending retries when another in-flight response denies access', async () => {
++    const { page, waitForTimeout } = fakePage()
++    let releaseRetry: () => void = () => undefined
++    const heldRetry = new Promise<void>((resolve) => { releaseRetry = resolve })
++    waitForTimeout.mockImplementation(async (...args: unknown[]) => {
++      if (args[0] === 600) await heldRetry
++    })
++    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
++      const request = JSON.parse(String(init.body)) as { operationName: string }
++      if (request.operationName === 'Retrying') return response(503)
++      if (request.operationName === 'Denied') return response(429)
++      return response()
++    })
++    vi.stubGlobal('fetch', fetch)
++    const pending = postGraphQlBatch(page, [body('First'), body('Retrying'), body('Denied')])
++    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
++    // Allow the denied response to be normalized before unblocking the transient retry.
++    await new Promise((resolve) => setTimeout(resolve, 0))
++    releaseRetry()
++    const batch = await pending
++    expect(fetch).toHaveBeenCalledTimes(3)
++    expect(batch[1]).toMatchObject({ ok: false, status: 429, retriable: false })
++    expect(batch[2]).toMatchObject({ ok: false, status: 429 })
++  })
++
++  it('bounds fetch with an abort signal and network timeouts share the three-attempt limit', async () => {
++    vi.useFakeTimers()
++    const { page } = fakePage()
++    const fetch = vi.fn(async (_url: unknown, init: RequestInit) => {
++      if (!init.signal) throw new Error('No signal')
++      await new Promise<void>((_resolve, reject) => {
++        init.signal!.addEventListener('abort', () => reject(new Error('timeout')), { once: true })
++      })
++      return response()
++    })
++    // AbortSignal.timeout uses native timers, so provide a deterministic equivalent for this test.
++    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
++      const controller = new AbortController()
++      setTimeout(() => controller.abort(), ms)
++      return controller.signal
++    })
++    vi.stubGlobal('fetch', fetch)
++    const pending = postGraphQlWithRetry(page, 'Test', 'offline', {})
++    const assertion = expect(pending).rejects.toMatchObject({ category: 'network', retriable: true })
++    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS * 3)
++    await assertion
++    expect(fetch).toHaveBeenCalledTimes(3)
++    vi.restoreAllMocks()
++  })
++
++  it('does not issue requests for an empty batch', async () => {
++    const { page, evaluate } = fakePage()
++    await expect(postGraphQlBatch(page, [])).resolves.toEqual([])
++    expect(evaluate).not.toHaveBeenCalled()
++  })
++})
+diff --git a/server/af/transport.ts b/server/af/transport.ts
+index f5fff7af321dad2fd8b0f66ab8de9c1ccb202872..a4698ed7bd5689dbc13a58a7a20d60a23f9ad7c0 100644
+--- a/server/af/transport.ts
++++ b/server/af/transport.ts
+@@ -1,17 +1,16 @@
+ import type { Page } from 'patchright'
+-import { refreshCollectorPage } from './browser.js'
+ import {
+   BATCH_CONCURRENCY,
+   BATCH_SPACING_MS,
+-  ENDPOINT,
+   ENDPOINT_PATH,
+-  MAX_FETCH_RETRIES,
+   RETRY_BACKOFF_MS,
+   SAFE_OPERATION,
+ } from './hashes.js'
+-import { graphQlErrorMessage, solveHashcash } from './hashcash.js'
++import { solveHashcash } from './hashcash.js'
+ import { markSessionWarm } from './session-state.js'
+ import type { BookingFlow } from './types.js'
++import { AirFranceResponseError, asResponseError, normalizeFetchResult } from './response-validation.js'
++import type { GraphQlFailure, GraphQlResult, TransportFetchResult } from './response-validation.js'
+ 
+ export interface GraphQlBody {
+   operationName: string
+@@ -22,21 +21,19 @@ export interface GraphQlBody {
+   }
+ }
+ 
+-interface FetchResult {
+-  ok: boolean
+-  status?: number
+-  data?: unknown
+-  error?: string
++export const REQUEST_TIMEOUT_MS = 15_000
++const MAX_REQUEST_ATTEMPTS = 3
++
++type TransportOptions = {
++  queryBookingFlow?: BookingFlow
++  useRewardHeaders?: boolean
++  revision?: string
+ }
+ 
+ const spoofedPath = (queryBookingFlow: BookingFlow): string => (
+   `${ENDPOINT_PATH}?bookingFlow=${queryBookingFlow}&operationName=${SAFE_OPERATION}`
+ )
+ 
+-const spoofedAbsolute = (queryBookingFlow: BookingFlow): string => (
+-  `${ENDPOINT}?bookingFlow=${queryBookingFlow}&operationName=${SAFE_OPERATION}`
+-)
+-
+ const cashHeaders = {
+   accept: 'application/json, text/plain, */*',
+   'content-type': 'application/json',
+@@ -56,110 +53,78 @@ const rewardHeaders = (revision: string) => ({
+   'x-ubc-name': 'search',
+ })
+ 
+-/** FilterScript page-context fetch (relative URL). */
++/** A single bounded fetch. Retry policy belongs to the caller, never nested loops. */
+ const evaluatePageFetch = async (
+   page: Page,
+   body: GraphQlBody,
+-  options: { queryBookingFlow?: BookingFlow; useRewardHeaders?: boolean; revision?: string },
+-): Promise<FetchResult> => {
++  options: TransportOptions,
++): Promise<TransportFetchResult> => {
+   const queryBookingFlow = options.queryBookingFlow ?? 'LEISURE'
+   const headers = options.useRewardHeaders && options.revision
+     ? rewardHeaders(options.revision)
+     : { ...cashHeaders }
+ 
+-  return page.evaluate(async ({ url, hdrs, payload, retries, backoff }) => {
+-    for (let attempt = 0; attempt < retries; attempt += 1) {
++  return page.evaluate(async ({ url, hdrs, payload, timeoutMs }) => {
++    try {
++      const response = await fetch(url, {
++        method: 'POST',
++        credentials: 'include',
++        headers: hdrs,
++        body: JSON.stringify(payload),
++        signal: AbortSignal.timeout(timeoutMs),
++      })
++      const text = await response.text()
++      if (text.trimStart().startsWith('<')) {
++        return { ok: false, status: response.status, category: 'malformed' as const }
++      }
+       try {
+-        const response = await fetch(url, {
+-          method: 'POST',
+-          credentials: 'include',
+-          headers: hdrs,
+-          body: JSON.stringify(payload),
+-        })
+-        const text = await response.text()
+-        if (text.trimStart().startsWith('<')) {
+-          return { ok: false, status: response.status, error: `HTML challenge (HTTP ${response.status})` }
+-        }
+         return { ok: true, status: response.status, data: JSON.parse(text) }
+-      } catch (error) {
+-        if (attempt < retries - 1) {
+-          await new Promise((resolve) => setTimeout(resolve, backoff * (attempt + 1)))
+-          continue
+-        }
+-        return { ok: false, error: error instanceof Error ? error.message : String(error) }
++      } catch {
++        return { ok: false, status: response.status, category: 'malformed' as const }
+       }
++    } catch {
++      return { ok: false, category: 'network' as const }
+     }
+-    return { ok: false, error: 'fetch retries exhausted' }
+   }, {
+     url: spoofedPath(queryBookingFlow),
+     hdrs: headers,
+     payload: body,
+-    retries: MAX_FETCH_RETRIES,
+-    backoff: RETRY_BACKOFF_MS,
++    timeoutMs: REQUEST_TIMEOUT_MS,
+   })
+ }
+ 
+-/** Iframe-native fetch fallback (absolute URL). */
+-const evaluateIframeFetch = async (
++/** Do not replay responses through another frame or refresh a denied session. */
++export const evaluateFetch = async (
+   page: Page,
+   body: GraphQlBody,
+-  options: { queryBookingFlow?: BookingFlow; useRewardHeaders?: boolean; revision?: string },
+-): Promise<FetchResult> => {
+-  const queryBookingFlow = options.queryBookingFlow ?? 'LEISURE'
+-  const headers = options.useRewardHeaders && options.revision
+-    ? rewardHeaders(options.revision)
+-    : { ...cashHeaders }
++  options: TransportOptions = {},
++): Promise<TransportFetchResult> => evaluatePageFetch(page, body, options)
+ 
+-  return page.evaluate(async ({ url, hdrs, payload, retries, backoff }) => {
+-    const frame = document.createElement('iframe')
+-    frame.hidden = true
+-    document.documentElement.append(frame)
+-    try {
+-      const nativeFetch = frame.contentWindow?.fetch.bind(frame.contentWindow)
+-      if (!nativeFetch) return { ok: false, error: 'Native browser fetch is unavailable' }
+-      for (let attempt = 0; attempt < retries; attempt += 1) {
+-        try {
+-          const response = await nativeFetch(url, {
+-            method: 'POST',
+-            credentials: 'include',
+-            headers: hdrs,
+-            body: JSON.stringify(payload),
+-          })
+-          const text = await response.text()
+-          if (text.trimStart().startsWith('<')) {
+-            return { ok: false, status: response.status, error: `HTML challenge (HTTP ${response.status})` }
+-          }
+-          return { ok: true, status: response.status, data: JSON.parse(text) }
+-        } catch (error) {
+-          if (attempt < retries - 1) {
+-            await new Promise((resolve) => setTimeout(resolve, backoff * (attempt + 1)))
+-            continue
+-          }
+-          return { ok: false, error: error instanceof Error ? error.message : String(error) }
+-        }
+-      }
+-      return { ok: false, error: 'fetch retries exhausted' }
+-    } finally {
+-      frame.remove()
+-    }
+-  }, {
+-    url: spoofedAbsolute(queryBookingFlow),
+-    hdrs: headers,
+-    payload: body,
+-    retries: MAX_FETCH_RETRIES,
+-    backoff: RETRY_BACKOFF_MS,
+-  })
++const requestOnce = async <T>(
++  page: Page,
++  body: GraphQlBody,
++  options: TransportOptions,
++): Promise<GraphQlResult<T>> => {
++  try {
++    return normalizeFetchResult<T>(await evaluateFetch(page, body, options))
++  } catch {
++    return normalizeFetchResult<T>({ ok: false, category: 'network' })
++  }
+ }
+ 
+-export const evaluateFetch = async (
++const requestWithRetry = async <T>(
+   page: Page,
+   body: GraphQlBody,
+-  options: { queryBookingFlow?: BookingFlow; useRewardHeaders?: boolean; revision?: string } = {},
+-): Promise<FetchResult> => {
+-  // Prefer FilterScript page fetch; only fall back to iframe-native on non-403 failures.
+-  const pageResult = await evaluatePageFetch(page, body, options)
+-  if (pageResult.ok || pageResult.status === 403) return pageResult
+-  return evaluateIframeFetch(page, body, options)
++  options: TransportOptions,
++  stopReason?: () => GraphQlFailure | undefined,
++): Promise<GraphQlResult<T>> => {
++  for (let attempt = 0; ; attempt += 1) {
++    const stopped = stopReason?.()
++    if (stopped) return skippedAfter(stopped)
++    const result = await requestOnce<T>(page, body, options)
++    if (result.ok || !result.retriable || attempt === MAX_REQUEST_ATTEMPTS - 1) return result
++    await page.waitForTimeout(RETRY_BACKOFF_MS * (attempt + 1))
++  }
+ }
+ 
+ export const buildGraphQlBody = (
+@@ -181,28 +146,14 @@ export const postGraphQl = async <T>(
+   operationName: string,
+   persistedQueryHash: string,
+   variables: Record<string, unknown>,
+-  options: {
+-    withHashcash?: boolean
+-    queryBookingFlow?: BookingFlow
+-    useRewardHeaders?: boolean
+-    revision?: string
+-  } = {},
++  options: TransportOptions & { withHashcash?: boolean } = {},
+ ): Promise<T> => {
+-  const body = buildGraphQlBody(
+-    operationName,
+-    persistedQueryHash,
+-    variables,
+-    options.withHashcash ?? false,
+-  )
+-  const result = await evaluateFetch(page, body, options)
+-  if (!result.ok) throw new Error(`Air France GraphQL ${operationName}: ${result.error ?? 'fetch failed'}`)
+-  if (result.status != null && result.status >= 400) {
+-    throw new Error(`Air France GraphQL ${operationName}: HTTP ${result.status}`)
+-  }
+-  const payload = result.data as T & { errors?: Array<{ message?: string; extensions?: { code?: string } }> }
+-  if (payload?.errors?.length) throw new Error(graphQlErrorMessage(payload.errors))
++  const result = await requestOnce<T>(page, buildGraphQlBody(
++    operationName, persistedQueryHash, variables, options.withHashcash ?? false,
++  ), options)
++  if (!result.ok) throw asResponseError(result)
+   markSessionWarm()
+-  return payload
++  return result.data
+ }
+ 
+ export const postGraphQlWithRetry = async <T>(
+@@ -212,84 +163,56 @@ export const postGraphQlWithRetry = async <T>(
+   variables: Record<string, unknown>,
+   options: Parameters<typeof postGraphQl>[4] = {},
+ ): Promise<T> => {
+-  let lastError: unknown
+-  for (let attempt = 0; attempt < 3; attempt += 1) {
+-    try {
+-      return await postGraphQl<T>(page, operationName, persistedQueryHash, variables, options)
+-    } catch (error) {
+-      lastError = error
+-      await refreshCollectorPage(page)
+-      await page.waitForTimeout(4_000 * (attempt + 1))
+-    }
+-  }
+-  throw lastError instanceof Error ? lastError : new Error(String(lastError))
++  const result = await requestWithRetry<T>(page, buildGraphQlBody(
++    operationName, persistedQueryHash, variables, options.withHashcash ?? false,
++  ), options)
++  if (!result.ok) throw asResponseError(result)
++  markSessionWarm()
++  return result.data
+ }
+ 
+-const runBatchWorkers = async <T>(
++const skippedAfter = (failure: GraphQlFailure): GraphQlFailure => ({
++  ...failure,
++  error: `Skipped after ${failure.category} failure${failure.status == null ? '' : ` (HTTP ${failure.status})`}`,
++  retriable: false,
++})
++
++/** Preserve request order, validate every result, and stop scheduling after access denial. */
++export const postGraphQlBatch = async <T>(
+   page: Page,
+   bodies: GraphQlBody[],
+-  options: { queryBookingFlow?: BookingFlow; useRewardHeaders?: boolean; revision?: string },
+-): Promise<Array<{ ok: boolean; data?: T; error?: string }>> => {
+-  const results = new Array<{ ok: boolean; data?: T; error?: string }>(bodies.length)
+-  let next = 0
++  options: TransportOptions = {},
++): Promise<Array<GraphQlResult<T>>> => {
++  if (!bodies.length) return []
++  const results = new Array<GraphQlResult<T>>(bodies.length)
++  const first = await requestWithRetry<T>(page, bodies[0], options)
++  results[0] = first
++  if (!first.ok && first.blocksFurtherRequests) {
++    return [first, ...bodies.slice(1).map(() => skippedAfter(first))]
++  }
++  let stop: GraphQlFailure | undefined
++  let next = 1
+   const worker = async () => {
+     while (next < bodies.length) {
+       const index = next
+       next += 1
+-      if (index > 0) await page.waitForTimeout(BATCH_SPACING_MS)
+-      const result = await evaluateFetch(page, bodies[index], options)
+-      results[index] = {
+-        ok: result.ok,
+-        data: result.data as T | undefined,
+-        error: result.error,
++      if (stop) {
++        results[index] = skippedAfter(stop)
++        continue
+       }
++      await page.waitForTimeout(BATCH_SPACING_MS)
++      if (stop) {
++        results[index] = skippedAfter(stop)
++        continue
++      }
++      const result = await requestWithRetry<T>(page, bodies[index], options, () => stop)
++      results[index] = result
++      if (!result.ok && result.blocksFurtherRequests) stop = result
+     }
+   }
+-  await Promise.all(Array.from(
+-    { length: Math.min(BATCH_CONCURRENCY, bodies.length) },
+-    () => worker(),
+-  ))
++  await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, bodies.length - 1) }, () => worker()))
++  if (results.some((result) => result.ok)) markSessionWarm()
+   return results
+ }
+ 
+-/** Parallel batch via FilterScript fetch, with warm-up + refresh retry. */
+-export const postGraphQlBatch = async <T>(
+-  page: Page,
+-  bodies: GraphQlBody[],
+-  options: { queryBookingFlow?: BookingFlow; useRewardHeaders?: boolean; revision?: string } = {},
+-): Promise<Array<{ ok: boolean; data?: T; error?: string }>> => {
+-  if (!bodies.length) return []
+-
+-  const first = await evaluateFetch(page, bodies[0], options)
+-  if (!first.ok) {
+-    await refreshCollectorPage(page)
+-    const retriedFirst = await evaluateFetch(page, bodies[0], options)
+-    if (!retriedFirst.ok) {
+-      return bodies.map((_, index) => (
+-        index === 0
+-          ? { ok: false, error: retriedFirst.error }
+-          : { ok: false, error: 'skipped after warm-up failure' }
+-      ))
+-    }
+-    if (bodies.length === 1) return [{ ok: true, data: retriedFirst.data as T }]
+-    const rest = await runBatchWorkers<T>(page, bodies.slice(1), options)
+-    return [{ ok: true, data: retriedFirst.data as T }, ...rest]
+-  }
+-
+-  if (bodies.length === 1) return [{ ok: true, data: first.data as T }]
+-  const rest = await runBatchWorkers<T>(page, bodies.slice(1), options)
+-  const results = [{ ok: true, data: first.data as T }, ...rest]
+-  const failedIdx = results.flatMap((result, index) => (result.ok ? [] : [index]))
+-  if (!failedIdx.length) return results
+-
+-  await refreshCollectorPage(page)
+-  for (const index of failedIdx) {
+-    const retried = await evaluateFetch(page, bodies[index], options)
+-    results[index] = {
+-      ok: retried.ok,
+-      data: retried.data as T | undefined,
+-      error: retried.error,
+-    }
+-  }
+-  return results
+-}
++export { AirFranceResponseError }
+diff --git a/server/af/variables.ts b/server/af/variables.ts
+index 811f5a662c31a4be75ef85d6b21edac5e0757976..d9c13f4864314cb36afa3d4799cd97d6420d4717 100644
+--- a/server/af/variables.ts
++++ b/server/af/variables.ts
+@@ -1,4 +1,5 @@
+ import type { Cabin, SearchRequest } from '../../src/types.js'
++import { dataError, isIsoDate } from './data-validation.js'
+ import type { BookingFlow, TravelCompanion } from './types.js'
+ 
+ export const addDays = (isoDate: string, days: number): string => {
+@@ -163,10 +164,15 @@ export const monthBounds = (month: string): [string, string] => {
+   return [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+ }
+ 
+-export const candidateRequests = (request: SearchRequest): SearchRequest[] => {
++export const candidateRequests = (request: SearchRequest, today = new Date().toISOString().slice(0, 10)): SearchRequest[] => {
++  if (!isIsoDate(request.departureDate) || !isIsoDate(request.returnDate) || request.returnDate <= request.departureDate) {
++    throw dataError('Invalid journey dates')
++  }
++  if (!isIsoDate(today) || request.departureDate < today) throw dataError('Departure is in the past')
++  if (!Number.isInteger(request.flexibleDays) || request.flexibleDays < 0 || request.flexibleDays > 30) throw dataError('Invalid date flexibility')
+   if (!request.flexibleDays) return [request]
+   return Array.from({ length: request.flexibleDays * 2 + 1 }, (_, index) => {
+-    const departureDate = addDays(request.departureDate, index - request.flexibleDays)
+-    return { ...request, departureDate, returnDate: addDays(departureDate, request.tripLengthDays) }
+-  })
++    const offset = index - request.flexibleDays
++    return { ...request, departureDate: addDays(request.departureDate, offset), returnDate: addDays(request.returnDate, offset) }
++  }).filter((candidate) => candidate.departureDate >= today)
+ }
+diff --git a/server/api-validation.test.ts b/server/api-validation.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..5207469b4d68d5074885247d8c0eee329a28a506
+--- /dev/null
++++ b/server/api-validation.test.ts
+@@ -0,0 +1,98 @@
++import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
++
++const api = vi.hoisted(() => ({ searchCash: vi.fn(), searchReward: vi.fn(), exploreCash: vi.fn(), exploreReward: vi.fn(), prewarm: vi.fn() }))
++vi.mock('./airfrance-api.js', async () => {
++  const { FlyingBlueAuthError } = await import('./af/hashcash.js')
++  return {
++    FlyingBlueAuthError, searchCashOffers: api.searchCash, searchRewardOffers: api.searchReward,
++    exploreCashFares: api.exploreCash, exploreRewardFares: api.exploreReward, prewarmCollector: api.prewarm,
++    confirmFlyingBlueSession: vi.fn(), isFlyingBlueAuthenticated: vi.fn(), openFlyingBlueLogin: vi.fn(),
++    mergeCashAndRewardOffers: (cash: unknown[], reward: unknown[]) => [...cash, ...reward],
++  }
++})
++vi.mock('./airfrance.js', () => ({ getAirFranceStations: vi.fn() }))
++import { app } from './index.js'
++import { AirFranceResponseError } from './af/response-validation.js'
++
++const station = (code: string) => ({ code, cityCode: code, cityName: code, countryName: '', displayText: code, stationType: 'AIRPORT', isOrigin: true, isDestination: true })
++const request = () => ({ origin: station('ICN'), destination: station('CDG'), departureDate: '2099-12-01', returnDate: '2099-12-11',
++  flexibleDays: 0, tripLengthDays: 10, cabins: ['ECONOMY'], paymentMode: 'miles', adults: 1, maxStops: 2,
++  maxDurationHours: 48, nearbyAirports: false, separateTickets: false, longLayover: false, mileValueCents: 1.2 })
++const empty = () => ({ offers: [], fareCalendar: [], monthlyCalendar: [], operations: [], candidatePairs: 1, warnings: [], cacheHit: false })
++const failed = (status: number) => new AirFranceResponseError({ ok: false, error: `HTTP ${status}`, status,
++  category: 'http', retriable: status === 503, blocksFurtherRequests: status !== 503 })
++
++beforeEach(() => {
++  vi.clearAllMocks()
++  api.searchCash.mockResolvedValue(empty()); api.searchReward.mockResolvedValue(empty())
++  api.exploreCash.mockResolvedValue({ months: [], operations: [], cacheHit: false })
++  api.exploreReward.mockResolvedValue({ months: [], operations: [], cacheHit: false })
++})
++afterAll(async () => { await app.close() })
++
++describe('API validation with no airline connection', () => {
++  it('imports the app without starting background collection', async () => {
++    const response = await app.inject({ method: 'GET', url: '/api/health' })
++    expect(response.statusCode).toBe(200)
++    expect(response.json().ok).toBe(true)
++    expect(api.prewarm).not.toHaveBeenCalled()
++    expect(api.searchReward).not.toHaveBeenCalled()
++  })
++  it.each([
++    { origin: station('CDG') }, { returnDate: '2099-11-01' }, { returnDate: '2099-12-01' },
++    { departureDate: '2020-01-01' }, { departureDate: '2099-02-29' }, { origin: station('bad') },
++    { origin: { ...station('ICN'), stationType: 'RAIL' } }, { adults: 0 }, { adults: 10 }, { cabins: [] },
++    { flexibleDays: 31 }, { maxDurationHours: -1 },
++  ])('rejects invalid input before collecting: %j', async (change) => {
++    const response = await app.inject({ method: 'POST', url: '/api/search', payload: { ...request(), ...change } })
++    expect(response.statusCode).toBe(400)
++    expect(api.searchReward).not.toHaveBeenCalled()
++    expect(api.searchCash).not.toHaveBeenCalled()
++  })
++  it.each([403, 429, 503])('HTTP %i is blocked, not empty or an authentication error', async (status) => {
++    api.searchReward.mockRejectedValue(failed(status))
++    const response = (await app.inject({ method: 'POST', url: '/api/search', payload: request() })).json()
++    expect(response.status).toBe('blocked')
++    expect(response.authRequired).toBe(false)
++    expect(response.warnings.length).toBeGreaterThan(0)
++  })
++  it('HTTP401 requires authentication', async () => {
++    api.searchReward.mockRejectedValue(failed(401))
++    const response = (await app.inject({ method: 'POST', url: '/api/search', payload: request() })).json()
++    expect(response.status).toBe('auth-required')
++    expect(response.authRequired).toBe(true)
++  })
++  it('a confirmed empty response remains empty', async () => {
++    const response = (await app.inject({ method: 'POST', url: '/api/search', payload: request() })).json()
++    expect(response.status).toBe('empty')
++    expect(response.warnings).toEqual([])
++  })
++  it('preserves valid cash data when the reward query fails', async () => {
++    api.searchCash.mockResolvedValue({ ...empty(), cacheHit: true, offers: [{ id: 'known-cash-offer' }] })
++    api.searchReward.mockRejectedValue(failed(503))
++    const response = (await app.inject({ method: 'POST', url: '/api/search', payload: { ...request(), paymentMode: 'both' } })).json()
++    expect(response.offers).toEqual([{ id: 'known-cash-offer' }])
++    expect(response.trace.cacheHit).toBe(false)
++    expect(response.warnings.length).toBeGreaterThan(0)
++    expect(response.authRequired).toBe(false)
++  })
++  it('does not label a failed reward query as empty when cash is empty', async () => {
++    api.searchReward.mockRejectedValue(failed(503))
++    const response = (await app.inject({ method: 'POST', url: '/api/search', payload: { ...request(), paymentMode: 'both' } })).json()
++    expect(response.status).toBe('blocked')
++  })
++  it('rejects a same-airport exploration before collection', async () => {
++    const response = await app.inject({ method: 'POST', url: '/api/explore', payload: { origin: station('ICN'), destination: station('ICN') } })
++    expect(response.statusCode).toBe(400)
++    expect(api.exploreCash).not.toHaveBeenCalled()
++  })
++  it('preserves cash exploration without reporting a failed reward as a cache hit', async () => {
++    api.exploreCash.mockResolvedValue({ months: [{ month: '2099-12', cashTop3: [{ date: '2099-12-01', price: 100 }], milesTop3: [] }], operations: [], cacheHit: true })
++    api.exploreReward.mockRejectedValue(failed(503))
++    const response = (await app.inject({ method: 'POST', url: '/api/explore', payload: { origin: station('ICN'), destination: station('CDG'), paymentMode: 'both' } })).json()
++    expect(response.months).toHaveLength(1)
++    expect(response.trace.cacheHit).toBe(false)
++    expect(response.warnings.length).toBeGreaterThan(0)
++  })
++
++})
+diff --git a/server/date-validation.test.ts b/server/date-validation.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..d4a192a6fbfca982a1b2fbf04f9ae55086c711ad
+--- /dev/null
++++ b/server/date-validation.test.ts
+@@ -0,0 +1,41 @@
++import { describe, expect, it } from 'vitest'
++import { candidateRequests } from './af/variables.js'
++import { parseMonthlyFares, parseLowestFarePayload } from './af/parsers.js'
++import { smokeDates } from './smoke-dates.js'
++import type { SearchRequest } from '../src/types.js'
++
++describe('exact journey dates and mileage', () => {
++  it('preserves the explicit return date when flexible stay metadata differs', () => {
++    const result = candidateRequests({ departureDate: '2026-12-07', returnDate: '2026-12-27', tripLengthDays: 10, flexibleDays: 1 } as SearchRequest, '2026-10-31')
++    expect(result.map((value) => [value.departureDate, value.returnDate])).toEqual([
++      ['2026-12-06', '2026-12-26'], ['2026-12-07', '2026-12-27'], ['2026-12-08', '2026-12-28'],
++    ])
++  })
++  it('never queries past days in a flexible window', () => {
++    const result = candidateRequests({ departureDate: '2026-10-31', returnDate: '2026-11-10', flexibleDays: 30 } as SearchRequest, '2026-10-31')
++    expect(result).toHaveLength(31)
++    expect(result[0].departureDate).toBe('2026-10-31')
++  })
++  it('rejects past target dates', () => {
++    expect(() => candidateRequests({ departureDate: '2026-10-30', returnDate: '2026-11-10', flexibleDays: 0 } as SearchRequest, '2026-10-31')).toThrow('past')
++  })
++  it('rejects fractional reward miles while accepting decimal taxes', () => {
++    expect(() => parseMonthlyFares([{ flightDate: '2026-12-07', totalPriceItinerary: 0.5 }], 'REWARD')).toThrow('fare amount')
++    expect(() => parseLowestFarePayload({ data: { lowestFareOffers: { lowestOffers: [{ flightDate: '2026-12-07', totalPrice: 0.5 }] } } }, 'REWARD')).toThrow('fare amount')
++    expect(parseMonthlyFares([{ flightDate: '2026-12-07', totalPriceItinerary: 95000, totalTaxDetails: { totalPrice: 319.66 } }], 'REWARD')[0].taxes).toBe(319.66)
++  })
++})
++
++describe('future smoke-test journeys without starting a collection', () => {
++  const now = new Date('2026-10-31T00:00:00Z')
++  it('chooses future dates automatically', () => {
++    expect(smokeDates({}, now)).toEqual({ departureDate: '2026-11-30', returnDate: '2026-12-10', tripLengthDays: 10, flexibleDays: 0 })
++  })
++  it.each([
++    { AF_SMOKE_DEPARTURE_DATE: '2026-10-02' },
++    { AF_SMOKE_DEPARTURE_DATE: '2026-12-01', AF_SMOKE_RETURN_DATE: '2026-11-01' },
++    { AF_SMOKE_FLEX_DAYS: '31' }, { AF_SMOKE_FLEX_DAYS: 'invalid' },
++  ])('rejects invalid smoke parameters: %j', (environment) => {
++    expect(() => smokeDates(environment, now)).toThrow()
++  })
++})
+diff --git a/server/index.ts b/server/index.ts
+index 2f2e56e8f1a63a038e96a597d1907183f7183e24..9715d6c87c431990c2f346ab63be7c58b8485f33 100644
+--- a/server/index.ts
++++ b/server/index.ts
+@@ -1,3 +1,4 @@
++import { pathToFileURL } from 'node:url'
+ import cors from '@fastify/cors'
+ import Fastify from 'fastify'
+ import { z } from 'zod'
+@@ -15,40 +16,13 @@ import {
+   searchRewardOffers,
+ } from './airfrance-api.js'
+ import { getAirFranceStations } from './airfrance.js'
++import { AirFranceResponseError } from './af/response-validation.js'
++import { exploreSchema, requestSchema } from './request-validation.js'
+ import { describeAirFranceTransportError } from './af/transport-errors.js'
+ 
+-const app = Fastify({ logger: true })
++export const app = Fastify({ logger: process.env.NODE_ENV !== 'test' })
+ await app.register(cors, { origin: true })
+ 
+-const stationSchema = z.object({
+-  code: z.string(), cityCode: z.string(), cityName: z.string(), countryName: z.string(),
+-  displayText: z.string(), stationType: z.string(), isOrigin: z.boolean(), isDestination: z.boolean(),
+-})
+-
+-const requestSchema = z.object({
+-  origin: stationSchema,
+-  destination: stationSchema,
+-  departureDate: z.string().date(),
+-  returnDate: z.string().date(),
+-  flexibleDays: z.number().int().min(0).max(30),
+-  tripLengthDays: z.number().int().min(1).max(30),
+-  cabins: z.array(z.enum(['ECONOMY', 'PREMIUM', 'BUSINESS'])).min(1),
+-  paymentMode: z.enum(['cash', 'miles', 'both']),
+-  adults: z.number().int().min(1).max(9),
+-  maxStops: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+-  maxDurationHours: z.number().min(8).max(72),
+-  nearbyAirports: z.boolean(),
+-  separateTickets: z.boolean(),
+-  longLayover: z.boolean(),
+-  mileValueCents: z.number().min(0.1).max(10),
+-})
+-
+-const exploreSchema = z.object({
+-  origin: stationSchema,
+-  destination: stationSchema,
+-  paymentMode: z.enum(['cash', 'both']).default('both'),
+-})
+-
+ const mergeFareCalendars = (cash: FareCalendarItem[], reward: FareCalendarItem[]): FareCalendarItem[] => {
+   const merged = new Map<string, FareCalendarItem>()
+   for (const item of [...cash, ...reward]) {
+@@ -102,6 +76,9 @@ const explorationRequest = (origin: Station, destination: Station, paymentMode:
+   mileValueCents: 1.2,
+ })
+ 
++const isAuthenticationFailure = (error: unknown): boolean => error instanceof FlyingBlueAuthError
++  || (error instanceof AirFranceResponseError && (error.status === 401 || /^(UNAUTHENTICATED|UNAUTHORIZED)$/i.test(error.code ?? '')))
++
+ const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+ 
+ app.get('/api/health', async () => ({ ok: true, service: 'airfrance-rat', time: new Date().toISOString() }))
+@@ -201,6 +178,7 @@ app.post('/api/explore', async (request, reply) => {
+   let cacheHit = false
+   let status: 'complete' | 'empty' | 'blocked' | 'auth-required' = 'empty'
+   let authRequired = false
++  let queryFailed = false
+   try {
+     const cash = await exploreCashFares(searchRequest)
+     let rewardMonths: ExploreMonthItem[] = []
+@@ -213,21 +191,22 @@ app.post('/api/explore', async (request, reply) => {
+         operations.push(...reward.operations)
+         if (!rewardMonths.length) warnings.push('Air France n’a retourné aucun calendrier Miles pour cette route.')
+       } catch (error) {
+-        if (!(error instanceof FlyingBlueAuthError)) throw error
+-        authRequired = true
+-        warnings.push('Connexion Flying Blue requise pour les Miles — une fenêtre Chrome a été ouverte.')
++        rewardCacheHit = false
++        authRequired = isAuthenticationFailure(error)
++        queryFailed = !authRequired
++        warnings.push(authRequired ? 'Connexion Flying Blue requise pour les Miles.' : describeAirFranceTransportError(error))
+       }
+     }
+     months = mergeExploreMonths(cash.months, rewardMonths)
+     operations.push(...cash.operations)
+     operations = [...new Set(operations)]
+     cacheHit = cash.cacheHit && rewardCacheHit
+-    status = months.length ? 'complete' : 'empty'
++    status = months.length ? 'complete' : queryFailed ? 'blocked' : authRequired ? 'auth-required' : 'empty'
+   } catch (error) {
+     request.log.warn(error, 'Air France monthly exploration failed')
+-    status = error instanceof FlyingBlueAuthError ? 'auth-required' : 'blocked'
+-    authRequired = error instanceof FlyingBlueAuthError
+-    warnings.push(error instanceof FlyingBlueAuthError
++    status = isAuthenticationFailure(error) ? 'auth-required' : 'blocked'
++    authRequired = isAuthenticationFailure(error)
++    warnings.push(isAuthenticationFailure(error)
+       ? 'Connexion Flying Blue requise — connectez-vous dans la fenêtre Chrome, puis relancez.'
+       : describeAirFranceTransportError(error))
+   }
+@@ -266,6 +245,7 @@ app.post('/api/search', async (request, reply) => {
+   let status: 'complete' | 'empty' | 'blocked' | 'auth-required' = 'empty'
+   let candidatePairs = 0
+   let authRequired = false
++  let queryFailed = false
+ 
+   try {
+     let cashOffers: RawOffer[] = []
+@@ -298,10 +278,11 @@ app.post('/api/search', async (request, reply) => {
+         cacheHits.push(result.cacheHit)
+         if (result.warnings?.length) warnings.push(...result.warnings)
+       } catch (error) {
+-        if (!(error instanceof FlyingBlueAuthError)) throw error
+         if (searchRequest.paymentMode === 'miles') throw error
+-        authRequired = true
+-        warnings.push('Prix euros disponibles — connectez-vous à Flying Blue dans Chrome pour les Miles.')
++        cacheHits.push(false)
++        authRequired = isAuthenticationFailure(error)
++        queryFailed = !authRequired
++        warnings.push(authRequired ? 'Prix euros disponibles — connexion Flying Blue requise pour les Miles.' : describeAirFranceTransportError(error))
+       }
+     }
+ 
+@@ -312,9 +293,9 @@ app.post('/api/search', async (request, reply) => {
+     monthlyCalendar = mergeMonthlyCalendars(cashMonthlyCalendar, rewardMonthlyCalendar)
+     operations = [...new Set(operations)]
+     cacheHit = cacheHits.length > 0 && cacheHits.every(Boolean)
+-    status = offers.length ? 'complete' : 'empty'
++    status = offers.length ? 'complete' : queryFailed ? 'blocked' : authRequired ? 'auth-required' : 'empty'
+   } catch (error) {
+-    if (error instanceof FlyingBlueAuthError) {
++    if (isAuthenticationFailure(error)) {
+       status = 'auth-required'
+       authRequired = true
+       warnings.push('Connexion Flying Blue requise — connectez-vous dans la fenêtre Chrome, puis relancez.')
+@@ -340,8 +321,10 @@ app.post('/api/search', async (request, reply) => {
+   }
+ })
+ 
+-const port = Number(process.env.PORT ?? 8787)
+-await app.listen({ host: '127.0.0.1', port })
+-void prewarmCollector().catch((error) => {
+-  app.log.warn(error, 'Pré-chauffage collecteur Air France échoué (sera retenté à la première recherche)')
+-})
++if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
++  const port = Number(process.env.PORT ?? 8787)
++  await app.listen({ host: '127.0.0.1', port })
++  void prewarmCollector().catch((error) => {
++    app.log.warn(error, 'Collector initialization failed')
++  })
++}
+diff --git a/server/live-smoke.ts b/server/live-smoke.ts
+index 110e35951401923a9b6a7d9cb2c1e03657b7aed5..1e69e59f9893d1d0705004723e3977f003f3ae04 100644
+--- a/server/live-smoke.ts
++++ b/server/live-smoke.ts
+@@ -1,3 +1,4 @@
++import { smokeDates } from './smoke-dates.js'
+ import type { SearchRequest, Station } from '../src/types.js'
+ import { closeAirFranceTransport, searchCashOffers } from './airfrance-api.js'
+ 
+@@ -15,10 +16,7 @@ const station = (code: string, cityName: string): Station => ({
+ const request: SearchRequest = {
+   origin: station('NCE', 'Nice'),
+   destination: station('RUN', 'Saint-Denis de la Réunion'),
+-  departureDate: '2026-10-02',
+-  returnDate: '2026-10-12',
+-  flexibleDays: Number(process.env.AF_SMOKE_FLEX_DAYS ?? 0),
+-  tripLengthDays: 10,
++  ...smokeDates(process.env),
+   cabins: ['ECONOMY'],
+   paymentMode: 'cash',
+   adults: 1,
+diff --git a/server/pipeline-validation.test.ts b/server/pipeline-validation.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..57cf0dfb4ba5846f6c3eadc4cf34f6ff71eff708
+--- /dev/null
++++ b/server/pipeline-validation.test.ts
+@@ -0,0 +1,84 @@
++import type { Page } from 'patchright'
++import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++const network = vi.hoisted(() => ({ fetch: vi.fn(), navigate: vi.fn() }))
++vi.mock('./af/browser.js', async (original) => ({
++  ...await original<typeof import('./af/browser.js')>(),
++  withTransportLock: async (fn: () => Promise<unknown>) => fn(),
++  withRecoveredCollector: async (fn: (page: Page) => Promise<unknown>) => fn({
++    evaluate: async (fn: (args: unknown) => Promise<unknown>, args: unknown) => fn(args),
++    waitForTimeout: async () => {},
++  } as unknown as Page),
++  navigateAirFrance: network.navigate,
++}))
++vi.mock('./af/reward-session.js', () => ({
++  prepareRewardSession: async () => ({ searchStateUuid: 'offline-fixture', companions: [] }),
++  rewardTransportOptions: {},
++}))
++import { app } from './index.js'
++import { invalidateQueryCaches } from './af/explore-cache.js'
++
++const station = (code: string) => ({ code, cityCode: code, cityName: code, countryName: '', displayText: code, stationType: 'AIRPORT', isOrigin: true, isDestination: true })
++const request = () => ({ origin: station('ICN'), destination: station('CDG'), departureDate: '2099-12-01', returnDate: '2099-12-11',
++  flexibleDays: 0, tripLengthDays: 10, cabins: ['ECONOMY'], paymentMode: 'miles', adults: 1, maxStops: 2,
++  maxDurationHours: 48, nearbyAirports: false, separateTickets: false, longLayover: false, mileValueCents: 1.2 })
++const response = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } })
++const calendar = () => ({ data: { lowestFareOffers: { lowestOffers: [{ flightDate: '2099-12-01', currency: 'MILES', totalPriceItinerary: 90000 }] } } })
++const offers = () => ({ data: { availableOffers: { offerItineraries: [{
++  activeConnection: { segments: [{ origin: { code: 'ICN' }, destination: { code: 'CDG' } }] },
++  flightProducts: [{ connections: [
++    { _id: 'out', price: { currencyCode: 'MILES', amount: 40000 }, tax: { currencyCode: 'EUR', amount: 150.12 } },
++    { _id: 'back', price: { currencyCode: 'MILES', amount: 50000 }, tax: { currencyCode: 'EUR', amount: 169.54 } },
++  ] }],
++  upsellCabinProducts: [{ connections: [{ _id: 'out', cabinClass: 'ECONOMY', price: { currencyCode: 'MILES', amount: 40000 } }] }],
++}] } } })
++const send = async () => (await app.inject({ method: 'POST', url: '/api/search', payload: request() })).json()
++
++beforeEach(() => { vi.clearAllMocks(); invalidateQueryCaches(); vi.stubGlobal('fetch', network.fetch) })
++afterEach(() => vi.unstubAllGlobals())
++afterAll(async () => { await app.close() })
++
++describe('API → query → transport → parser → cache using synthetic airline responses', () => {
++  it('publishes the exact round-trip miles and tax total', async () => {
++    network.fetch.mockImplementation(async (_url: unknown, init: RequestInit) => {
++      const body = JSON.parse(init.body as string) as { operationName: string }
++      return response(body.operationName === 'SearchResultAvailableOffersQuery' ? offers() : calendar())
++    })
++    const result = await send()
++    expect(result.status).toBe('complete')
++    expect(result.offers[0].prices[0]).toMatchObject({ miles: 90000, taxes: 319.66 })
++    expect(network.fetch).toHaveBeenCalledTimes(2)
++    expect(network.navigate).not.toHaveBeenCalled()
++  })
++  it('never publishes or caches HTTP503 as no seats', async () => {
++    network.fetch.mockImplementation(async (_url: unknown, init: RequestInit) => {
++      const body = JSON.parse(init.body as string) as { operationName: string }
++      return body.operationName === 'SearchResultAvailableOffersQuery' ? response({ message: 'fixture failure' }, 503) : response(calendar())
++    })
++    expect((await send()).status).toBe('blocked')
++    expect((await send()).status).toBe('blocked')
++    expect(network.fetch).toHaveBeenCalledTimes(8)
++  })
++  it('rejects malformed HTTP200 and recovers on the next valid query', async () => {
++    network.fetch.mockResolvedValueOnce(response(calendar())).mockResolvedValueOnce(response({ data: { availableOffers: null } }))
++    const first = await send()
++    expect(first.status).toBe('blocked')
++    expect(first.authRequired).toBe(false)
++    network.fetch.mockResolvedValueOnce(response(calendar())).mockResolvedValueOnce(response(offers()))
++    expect((await send()).status).toBe('complete')
++    expect(network.fetch).toHaveBeenCalledTimes(4)
++  })
++  it('caches a confirmed explicit empty list, with no repeated request', async () => {
++    network.fetch.mockResolvedValueOnce(response(calendar())).mockResolvedValueOnce(response({ data: { availableOffers: { offerItineraries: [] } } }))
++    expect((await send()).status).toBe('empty')
++    const second = await send()
++    expect(second.status).toBe('empty')
++    expect(second.trace.cacheHit).toBe(true)
++    expect(network.fetch).toHaveBeenCalledTimes(2)
++  })
++  it.each([403, 429])('stops after one HTTP%i without navigation or a retry', async (status) => {
++    network.fetch.mockResolvedValue(response({ message: 'fixture rejection' }, status))
++    expect((await send()).status).toBe('blocked')
++    expect(network.fetch).toHaveBeenCalledTimes(1)
++    expect(network.navigate).not.toHaveBeenCalled()
++  })
++})
+diff --git a/server/request-validation.ts b/server/request-validation.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..9de0f3d63934cb0af4c05f237814e24ddc6a5216
+--- /dev/null
++++ b/server/request-validation.ts
+@@ -0,0 +1,37 @@
++import { z } from 'zod'
++
++const stationSchema = z.object({
++  code: z.string().regex(/^[A-Z]{3}$/),
++  cityCode: z.string(), cityName: z.string(), countryName: z.string(), displayText: z.string(),
++  stationType: z.enum(['AIRPORT', 'CITY']), isOrigin: z.boolean(), isDestination: z.boolean(),
++})
++
++export const requestSchema = z.object({
++  origin: stationSchema, destination: stationSchema,
++  departureDate: z.string().date(), returnDate: z.string().date(),
++  flexibleDays: z.number().int().min(0).max(30),
++  tripLengthDays: z.number().int().min(1).max(30),
++  cabins: z.array(z.enum(['ECONOMY', 'PREMIUM', 'BUSINESS'])).min(1),
++  paymentMode: z.enum(['cash', 'miles', 'both']), adults: z.number().int().min(1).max(9),
++  maxStops: z.union([z.literal(0), z.literal(1), z.literal(2)]),
++  maxDurationHours: z.number().min(8).max(72),
++  nearbyAirports: z.boolean(), separateTickets: z.boolean(), longLayover: z.boolean(),
++  mileValueCents: z.number().min(0.1).max(10),
++}).superRefine((request, ctx) => {
++  if (request.origin.code === request.destination.code) {
++    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['destination'], message: 'Origin and destination must differ' })
++  }
++  if (request.returnDate <= request.departureDate) {
++    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['returnDate'], message: 'Return must follow departure' })
++  }
++  if (request.departureDate < new Date().toISOString().slice(0, 10)) {
++    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['departureDate'], message: 'Departure is in the past' })
++  }
++})
++
++export const exploreSchema = z.object({
++  origin: stationSchema, destination: stationSchema,
++  paymentMode: z.enum(['cash', 'both']).default('both'),
++}).refine((request) => request.origin.code !== request.destination.code, {
++  path: ['destination'], message: 'Origin and destination must differ',
++})
+diff --git a/server/reward-smoke.ts b/server/reward-smoke.ts
+index cef4f6a2ddd5dffec7e990e2ea1f68389d5b9135..d35f76f672b76326b459bed9d3b8d72c0e4d18d6 100644
+--- a/server/reward-smoke.ts
++++ b/server/reward-smoke.ts
+@@ -1,3 +1,4 @@
++import { smokeDates } from './smoke-dates.js'
+ import type { SearchRequest, Station } from '../src/types.js'
+ import { closeAirFranceTransport, searchRewardOffers } from './airfrance-api.js'
+ 
+@@ -15,10 +16,7 @@ const station = (code: string, cityName: string): Station => ({
+ const request: SearchRequest = {
+   origin: station('NCE', 'Nice'),
+   destination: station('RUN', 'Saint-Denis de la Réunion'),
+-  departureDate: '2026-10-02',
+-  returnDate: '2026-10-12',
+-  flexibleDays: Number(process.env.AF_SMOKE_FLEX_DAYS ?? 0),
+-  tripLengthDays: 10,
++  ...smokeDates(process.env),
+   cabins: ['ECONOMY'],
+   paymentMode: 'miles',
+   adults: 1,
+diff --git a/server/smoke-dates.ts b/server/smoke-dates.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..cf8fb3e9be045637c6f74ddf89ff7fb3e9c2a293
+--- /dev/null
++++ b/server/smoke-dates.ts
+@@ -0,0 +1,16 @@
++import { isIsoDate } from './af/data-validation.js'
++import { addDays } from './af/variables.js'
++
++/** Smoke tests always use an explicit valid future journey, never a stale hard-coded date. */
++export const smokeDates = (environment: Record<string, string | undefined>, now = new Date()) => {
++  const today = now.toISOString().slice(0, 10)
++  const departureDate = environment.AF_SMOKE_DEPARTURE_DATE ?? addDays(today, 30)
++  const returnDate = environment.AF_SMOKE_RETURN_DATE ?? addDays(departureDate, 10)
++  const flexibleDays = Number(environment.AF_SMOKE_FLEX_DAYS ?? 0)
++  if (!isIsoDate(departureDate) || !isIsoDate(returnDate) || departureDate < today || returnDate <= departureDate) {
++    throw new Error('Invalid future smoke-test dates')
++  }
++  if (!Number.isInteger(flexibleDays) || flexibleDays < 0 || flexibleDays > 30) throw new Error('Invalid smoke flexibility')
++  const tripLengthDays = (Date.parse(returnDate) - Date.parse(departureDate)) / 86_400_000
++  return { departureDate, returnDate, tripLengthDays, flexibleDays }
++}

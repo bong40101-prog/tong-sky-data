@@ -1,0 +1,64 @@
+name: AF hardened validation
+on:
+  push:
+    branches: [audit/af-hardened-20261031]
+permissions: {}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PATCHRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      AUDIT_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - name: Fetch pinned harness and original source
+        run: |
+          git init harness
+          git -C harness remote add origin https://github.com/bong40101-prog/tong-sky-data.git
+          git -C harness fetch --depth 1 origin "$AUDIT_COMMIT"
+          git -C harness checkout --detach FETCH_HEAD
+          git init source
+          git -C source remote add origin https://github.com/RemiPelloux/AirFranceFilterScript.git
+          git -C source fetch --depth 1 origin ce846ef00474d284ba666cd44f6eebdd1d6505d2
+          git -C source checkout --detach FETCH_HEAD
+          test "$(git -C source rev-parse HEAD)" = ce846ef00474d284ba666cd44f6eebdd1d6505d2
+      - name: Apply exact hardening patch
+        working-directory: source
+        run: |
+          git apply --check ../harness/AF-HARDENING.patch
+          git apply ../harness/AF-HARDENING.patch
+          python - <<'PY'
+          import hashlib, json, pathlib
+          manifest = json.loads(pathlib.Path("../harness/AF-HARDENING-MANIFEST.json").read_text())
+          patch = pathlib.Path("../harness/AF-HARDENING.patch").read_bytes()
+          assert hashlib.sha256(patch).hexdigest() == manifest["patch_sha256"]
+          for name, expected in manifest["files"].items():
+              assert hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() == expected, name
+          print("Exact patch and all", len(manifest["files"]), "modified files verified")
+          PY
+      - name: Install frozen dependencies
+        working-directory: source
+        run: |
+          npm install --global pnpm@11.18.0 --ignore-scripts
+          pnpm install --frozen-lockfile
+      - name: All original and hardening tests
+        working-directory: source
+        run: pnpm test
+      - name: Type check
+        working-directory: source
+        run: pnpm typecheck
+      - name: Production build
+        working-directory: source
+        run: pnpm build
+      - name: Lint
+        working-directory: source
+        run: pnpm lint
+      - name: Validation scope
+        run: |
+          echo "All checks are strict; no continue-on-error."
+          echo "No airline connection, browser execution, login, or real reward collection was performed."
