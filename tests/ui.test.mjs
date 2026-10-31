@@ -117,3 +117,27 @@ test('Asiana full-period columns count business award and upgrade independently 
 test('refresh failure retains previously verified route calendars instead of clearing them',async()=>{
  const p=await page();try{await p.ready();const count=p.d.querySelectorAll('.route-card').length;assert.ok(count>0);p.denyKorean();p.d.getElementById('refresh').click();await waitFor(()=>!p.d.getElementById('refresh').disabled);assert.equal(p.d.querySelectorAll('.route-card').length,count);assert.equal(p.d.getElementById('notice').hidden,false);assert.ok(p.d.querySelectorAll('#calendar-grid button').length>0);}finally{p.close();}
 });
+
+test('Vietnam Airlines official lookup preserves the selected saved calendar and makes no requests',async()=>{
+ const p=await page();try{
+  await p.ready();choose(p,'destination','FCO');choose(p,'month','2026-11');p.d.getElementById('direction-back').click();
+  const before={calls:p.calls.length,title:p.d.getElementById('calendar-title').textContent,grid:p.d.getElementById('calendar-grid').innerHTML,cards:p.d.getElementById('route-list').innerHTML,month:p.d.getElementById('month').value};
+  const button=p.d.getElementById('vn-lookup');assert.equal(button.closest('[role="tablist"]'),null);assert.equal(button.getAttribute('role'),null);assert.equal(button.dataset.carrier,undefined);assert.equal(button.getAttribute('aria-haspopup'),'dialog');
+  button.click();const dialog=p.d.getElementById('vn-dialog');assert.equal(dialog.open,true);assert.equal(dialog.getAttribute('aria-labelledby'),'vn-title');assert.match(dialog.textContent,/Lotusmiles 로그인/);assert.match(dialog.textContent,/자동 수집·저장 달력은 현재 지원하지 않습니다/);
+  assert.match(dialog.querySelector('#vn-award-link').textContent,/보너스 항공권.*마일리지로 새 항공권 발권/s);assert.match(dialog.querySelector('#vn-upgrade-link').textContent,/좌석 승급.*보유 항공권을 상위 좌석/s);
+  const expected={
+   'vn-award-link':'https://www.vietnamairlines.com/kr/ko/lotusmiles/redeem-mile/ticket-awards/how-to-redeem-miles',
+   'vn-upgrade-link':'https://www.vietnamairlines.com/kr/ko/lotusmiles/redeem-mile/upgrade-awards',
+   'vn-home-link':'https://www.vietnamairlines.com/kr/ko/home'
+  };
+  for(const [id,url] of Object.entries(expected)){const a=p.d.getElementById(id);assert.equal(a.href,url);assert.equal(a.target,'_blank');assert.ok(a.relList.contains('noopener'));assert.ok(a.relList.contains('noreferrer'));}
+  assert.equal(dialog.querySelector('input'),null);assert.equal(dialog.querySelector('form').getAttribute('method'),'dialog');assert.equal(dialog.querySelector('.dialog-close').getAttribute('aria-label'),'베트남항공 안내 닫기');
+  // Escape uses the browser's native cancel default action; the app must not prevent it.
+  const cancel=new p.w.Event('cancel',{cancelable:true});dialog.dispatchEvent(cancel);assert.equal(cancel.defaultPrevented,false);
+  dialog.close();dialog.dispatchEvent(new p.w.Event('close'));assert.equal(dialog.open,false);assert.equal(p.d.activeElement,button);
+  assert.equal(p.calls.length,before.calls);assert.equal(p.d.getElementById('calendar-title').textContent,before.title);assert.equal(p.d.getElementById('calendar-grid').innerHTML,before.grid);assert.equal(p.d.getElementById('route-list').innerHTML,before.cards);assert.equal(p.d.getElementById('month').value,before.month);assert.equal(p.d.getElementById('tab-ke').getAttribute('aria-selected'),'true');
+ }finally{p.close();}
+});
+test('Vietnam Airlines guide leaves Asiana active without fetching a VN dataset',async()=>{
+ const p=await page();try{await p.ready();p.d.getElementById('tab-oz').click();await waitFor(()=>p.d.getElementById('load-status').textContent.includes('104개'));const before=p.calls.length,calendar=p.d.getElementById('calendar-grid').innerHTML;p.d.getElementById('vn-lookup').click();assert.equal(p.d.getElementById('tab-oz').getAttribute('aria-selected'),'true');assert.equal(p.d.getElementById('tab-ke').getAttribute('aria-selected'),'false');assert.equal(p.d.querySelector('[data-carrier="VN"]'),null);assert.equal(p.calls.length,before);assert.equal(p.d.getElementById('calendar-grid').innerHTML,calendar);}finally{p.close();}
+});
