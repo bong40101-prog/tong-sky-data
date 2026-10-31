@@ -1,0 +1,121 @@
+name: AF candidate offline audit
+on:
+  push:
+    branches:
+      - audit/af-filterscript-20261031
+permissions: {}
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PATCHRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - name: Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+      - name: Fetch pinned public source
+        run: |
+          git init source
+          git -C source remote add origin https://github.com/RemiPelloux/AirFranceFilterScript.git
+          git -C source fetch --depth 1 origin ce846ef00474d284ba666cd44f6eebdd1d6505d2
+          git -C source checkout --detach FETCH_HEAD
+          test "$(git -C source rev-parse HEAD)" = ce846ef00474d284ba666cd44f6eebdd1d6505d2
+      - name: Install dependencies
+        working-directory: source
+        run: |
+          npm install --global pnpm@11.18.0 --ignore-scripts
+          pnpm install --frozen-lockfile
+      - name: Original unit tests
+        id: unit
+        continue-on-error: true
+        working-directory: source
+        run: pnpm test
+      - name: Original type check
+        id: typecheck
+        continue-on-error: true
+        working-directory: source
+        run: pnpm typecheck
+      - name: Original production build
+        id: build
+        continue-on-error: true
+        working-directory: source
+        run: pnpm build
+      - name: Original lint
+        id: lint
+        continue-on-error: true
+        working-directory: source
+        run: pnpm lint
+      - name: Add offline error reproduction
+        working-directory: source
+        run: |
+          cat > server/audit-transport.test.ts <<'TEST'
+          import { afterEach, expect, it, vi } from 'vitest'
+          vi.mock('./af/browser.js', () => ({ refreshCollectorPage: vi.fn() }))
+          import { buildGraphQlBody, postGraphQl, postGraphQlBatch } from './af/transport.js'
+          import { parseAvailableOffers } from './af/parsers.js'
+          const fakePage = { evaluate: async (fn: any, arg: any) => fn(arg), waitForTimeout: vi.fn() } as any
+          afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
+          const serverError = () => vi.stubGlobal('fetch', vi.fn(async () => new Response(
+            JSON.stringify({ message: 'upstream unavailable' }), { status: 503, headers: { 'content-type': 'application/json' } }
+          )))
+          it('single request correctly rejects HTTP 503 JSON', async () => {
+            serverError()
+            await expect(postGraphQl(fakePage, 'Test', 'test', {})).rejects.toThrow('HTTP 503')
+          })
+          it('batch request must reject HTTP 503 instead of empty seat results', async () => {
+            serverError()
+            const result = await postGraphQlBatch(fakePage, [buildGraphQlBody('Test', 'test', {})])
+            console.log('OBSERVED_BATCH_503', JSON.stringify(result), 'PARSED', JSON.stringify(parseAvailableOffers(result[0].data as any)))
+            expect(result[0].ok).toBe(false)
+          })
+          TEST
+          cat > server/audit-cache.test.ts <<'TEST'
+          import { expect, it, vi } from 'vitest'
+          vi.mock('./af/browser.js', () => ({
+            withTransportLock: async (fn: any) => fn(),
+            withRecoveredCollector: async (fn: any) => fn({ waitForTimeout: vi.fn() }),
+            refreshCollectorPage: vi.fn(),
+          }))
+          vi.mock('./af/session-warm.js', () => ({ warmAkamaiSession: vi.fn() }))
+          vi.mock('./af/reward-session.js', () => ({
+            prepareRewardSession: vi.fn(async () => ({ searchStateUuid: 'offline-test', companions: [] })),
+            rewardTransportOptions: {},
+          }))
+          vi.mock('./af/transport.js', () => ({
+            postGraphQlWithRetry: vi.fn(async () => ({ data: { lowestFareOffers: { lowestOffers: [
+              { flightDate: '2026-12-07', totalPrice: 30000, totalPriceItinerary: 95000 }
+            ] } } })),
+          }))
+          import { exploreRewardFares } from './af/reward-explore.js'
+          import { postGraphQlWithRetry } from './af/transport.js'
+          it('different departure horizon must not reuse the previous calendar', async () => {
+            const station = (code: string) => ({ code, stationType: 'AIRPORT' })
+            const request = { origin: station('NCE'), destination: station('RUN'), adults: 1, cabins: ['ECONOMY'],
+              departureDate: '2026-11-01', returnDate: '2026-11-11', tripLengthDays: 10, paymentMode: 'miles' } as any
+            const first = await exploreRewardFares(request)
+            const calls = vi.mocked(postGraphQlWithRetry).mock.calls.length
+            const second = await exploreRewardFares({ ...request, departureDate: '2026-12-01', returnDate: '2026-12-11' })
+            console.log('OBSERVED_CACHE', JSON.stringify({ first: first.cacheHit, second: second.cacheHit,
+              callsBefore: calls, callsAfter: vi.mocked(postGraphQlWithRetry).mock.calls.length }))
+            expect(second.cacheHit).toBe(false)
+          })
+          TEST
+      - name: Verify suspected bugs with mocked responses
+        id: reproduction
+        continue-on-error: true
+        working-directory: source
+        run: pnpm exec vitest run server/audit-transport.test.ts server/audit-cache.test.ts
+      - name: Record outcomes
+        if: always()
+        env:
+          UNIT: ${{ steps.unit.outcome }}
+          TYPES: ${{ steps.typecheck.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          REPRODUCTION: ${{ steps.reproduction.outcome }}
+        run: |
+          echo "unit=$UNIT types=$TYPES build=$BUILD lint=$LINT expected-regressions=$REPRODUCTION"
+          echo "No airline site, browser, login, or reward endpoint was contacted."
