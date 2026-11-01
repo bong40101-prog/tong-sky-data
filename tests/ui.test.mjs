@@ -1,5 +1,7 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {JSDOM} from 'jsdom';
+import test,{mock} from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {JSDOM} from 'jsdom';
 const html=await readFile(new URL('../dist/index.html',import.meta.url),'utf8'),catalog=JSON.parse(await readFile(new URL('../dist/catalog.json',import.meta.url))),ke=JSON.parse(await readFile(new URL('europe-packed.json',import.meta.url))),oz=JSON.parse(await readFile(new URL('asiana-packed.json',import.meta.url)));
+// The checked-in calendar fixtures were observed on October 31; keep UI regressions independent of wall-clock time.
+mock.timers.enable({apis:['Date'],now:new Date('2026-10-31T14:59:00Z')});
 let serial=0;const waitFor=async condition=>{for(let n=0;n<300;n++){if(condition())return;await new Promise(r=>setTimeout(r,5));}throw new Error('UI condition was not reached');};
 async function page({holdAsiana=false,denyAsiana=false,keData=ke,denyKorean=false}={}){
  const dom=new JSDOM(html,{url:'https://example.test/',pretendToBeVisual:true}),d=dom.window.document,calls=[];let release,deny=denyAsiana;const gate=new Promise(r=>release=r);
@@ -70,14 +72,14 @@ const assertCountsMatchCells=(p,expected)=>{
 };
 test('Rome regression: every displayed monthly and directional count equals its actual calendar markers',async()=>{
  const p=await page();try{await p.ready();choose(p,'destination','FCO');
- const cases=[['2026-10','out',0,1],['2026-11','out',0,0],['2026-12','out',1,1],['2026-10','back',0,0],['2026-11','back',0,2],['2026-12','back',1,2]];
+ const cases=[['2026-10','out',0,1],['2026-11','out',0,0],['2026-12','out',9,9],['2026-10','back',0,0],['2026-11','back',0,2],['2026-12','back',9,10]];
  for(const [month,direction,bonus,upgrade] of cases){choose(p,'month',month);p.d.getElementById('direction-'+direction).click();assertCountsMatchCells(p,{prestigeAward:bonus,prestigeUpgrade:upgrade,firstCombined:0});assert.match(p.d.querySelector('.current-calendar-heading').textContent,new RegExp(Number(month.slice(5))+'월'));assert.match(p.d.querySelector('.current-calendar-heading').textContent,direction==='out'?/가는 편/:/오는 편/);}
  }finally{p.close();}
 });
 test('month arrows and seat filters update list, matching routes and calendar together',async()=>{
  const p=await page();try{await p.ready();choose(p,'destination','FCO');choose(p,'seat','1');
  assert.equal(p.d.querySelectorAll('.route-card.selected .type-count-row').length,1);assert.equal(p.d.querySelectorAll('#calendar-counts .type-count-row').length,1);
- assertCountsMatchCells(p,{prestigeUpgrade:1});p.d.getElementById('next-month').click();assertCountsMatchCells(p,{prestigeUpgrade:0});p.d.getElementById('next-month').click();assertCountsMatchCells(p,{prestigeUpgrade:1});p.d.getElementById('prev-month').click();
+ assertCountsMatchCells(p,{prestigeUpgrade:1});p.d.getElementById('next-month').click();assertCountsMatchCells(p,{prestigeUpgrade:0});p.d.getElementById('next-month').click();assertCountsMatchCells(p,{prestigeUpgrade:9});p.d.getElementById('prev-month').click();
  p.d.getElementById('only-marked').checked=true;p.d.getElementById('only-marked').dispatchEvent(new p.w.Event('change',{bubbles:true}));assert.equal(p.d.querySelectorAll('.route-card').length,1);assertCountsMatchCells(p,{prestigeUpgrade:0});
  p.d.getElementById('direction-back').click();assert.equal(p.d.querySelectorAll('.route-card').length,1);assertCountsMatchCells(p,{prestigeUpgrade:2});assert.equal(p.d.querySelectorAll('#calendar-grid .day-type-0').length,0);
  }finally{p.close();}
@@ -92,10 +94,10 @@ test('partial date ranges hide out-of-range markers and use the same clipped cou
 const readTotals=p=>Object.fromEntries([...p.d.querySelectorAll('.route-card.selected [data-total-field]')].map(row=>[row.dataset.totalField,{out:row.querySelector('[data-direction="out"]').textContent,back:row.querySelector('[data-direction="back"]').textContent}]));
 test('Rome shows full-period outbound and inbound totals separately while monthly calendar counts still match',async()=>{
  const p=await page();try{await p.ready();choose(p,'destination','FCO');
- const expected={prestigeAward:{out:'1일',back:'1일'},prestigeUpgrade:{out:'2일',back:'4일'},firstCombined:{out:'0일',back:'0일'}};
- assert.deepEqual(readTotals(p),expected);assert.match(p.d.getElementById('route-scope').textContent,/전체 기간/);assert.match(p.d.getElementById('route-scope').textContent,/2026-12-17/);
+ const expected={prestigeAward:{out:'9일',back:'9일'},prestigeUpgrade:{out:'10일',back:'12일'},firstCombined:{out:'0일',back:'0일'}};
+ assert.deepEqual(readTotals(p),expected);assert.match(p.d.getElementById('route-scope').textContent,/전체 기간/);assert.match(p.d.getElementById('route-scope').textContent,new RegExp(p.d.getElementById('end').value));
  for(const month of ['2026-11','2026-12'])for(const direction of ['out','back']){choose(p,'month',month);p.d.getElementById('direction-'+direction).click();assert.deepEqual(readTotals(p),expected);}
- assertCountsMatchCells(p,{prestigeAward:1,prestigeUpgrade:2,firstCombined:0});
+ assertCountsMatchCells(p,{prestigeAward:9,prestigeUpgrade:10,firstCombined:0});
  p.d.getElementById('start').value='2026-11-26';p.d.getElementById('end').value='2026-12-02';p.d.getElementById('search-form').dispatchEvent(new p.w.Event('submit',{bubbles:true,cancelable:true}));
  assert.deepEqual(readTotals(p),{prestigeAward:{out:'0일',back:'0일'},prestigeUpgrade:{out:'0일',back:'2일'},firstCombined:{out:'0일',back:'0일'}});
  choose(p,'seat','1');assert.deepEqual(readTotals(p),{prestigeUpgrade:{out:'0일',back:'2일'}});
@@ -103,7 +105,7 @@ test('Rome shows full-period outbound and inbound totals separately while monthl
 });
 test('a missing inbound direction stays unconfirmed without erasing verified outbound totals',async()=>{
  const {unpackDocument}=await import('../dist/model.js'),raw=await unpackDocument(ke);for(const key of Object.keys(raw.records))if(key.startsWith('FCO-ICN-'))delete raw.records[key];
- const p=await page({keData:raw});try{await p.ready();choose(p,'destination','FCO');assert.deepEqual(readTotals(p),{prestigeAward:{out:'1일',back:'미확인'},prestigeUpgrade:{out:'2일',back:'미확인'},firstCombined:{out:'0일',back:'미확인'}});}finally{p.close();}
+ const p=await page({keData:raw});try{await p.ready();choose(p,'destination','FCO');assert.deepEqual(readTotals(p),{prestigeAward:{out:'9일',back:'미확인'},prestigeUpgrade:{out:'10일',back:'미확인'},firstCombined:{out:'0일',back:'미확인'}});}finally{p.close();}
 });
 test('Asiana full-period columns count business award and upgrade independently in both directions',async()=>{
  const p=await page();try{await p.ready();p.d.getElementById('tab-oz').click();await waitFor(()=>p.d.getElementById('load-status').textContent.includes('104개'));
@@ -116,4 +118,20 @@ test('Asiana full-period columns count business award and upgrade independently 
 
 test('refresh failure retains previously verified route calendars instead of clearing them',async()=>{
  const p=await page();try{await p.ready();const count=p.d.querySelectorAll('.route-card').length;assert.ok(count>0);p.denyKorean();p.d.getElementById('refresh').click();await waitFor(()=>!p.d.getElementById('refresh').disabled);assert.equal(p.d.querySelectorAll('.route-card').length,count);assert.equal(p.d.getElementById('notice').hidden,false);assert.ok(p.d.querySelectorAll('#calendar-grid button').length>0);}finally{p.close();}
+});
+
+
+test('Korean Air uses rolling today plus360 while Asiana keeps plus359 and both tabs have plain airline names',async()=>{
+ const p=await page();try{await p.ready();const {addDays}=await import('../dist/model.js'),start=p.d.getElementById('start').value,end=p.d.getElementById('end');assert.equal(start,'2026-10-31');assert.equal(end.value,addDays(start,360));assert.equal(end.max,addDays(start,360));assert.equal(p.d.getElementById('start').max,end.max);assert.ok([...p.d.getElementById('month').options].some(o=>o.value==='2027-10'));assert.doesNotMatch(p.d.getElementById('tab-oz').textContent,/작업\s*중/);
+ p.d.getElementById('tab-oz').click();await waitFor(()=>p.d.getElementById('load-status').textContent.includes('104개'));assert.equal(end.value,addDays(start,359));assert.equal(end.max,addDays(start,359));p.d.getElementById('tab-ke').click();await waitFor(()=>p.d.getElementById('load-status').textContent.includes('72개'));assert.equal(end.value,addDays(start,360));assert.equal(end.max,addDays(start,360));
+ }finally{p.close();}
+});
+test('extended Korean Air range shows validated December18 marks but unsaved future days stay unknown',async()=>{
+ const p=await page();try{await p.ready();choose(p,'destination','FCO');choose(p,'month','2026-12');const observed=p.d.querySelector('[data-date="2026-12-18"]');assert.equal(observed.disabled,false);assert.equal(observed.querySelectorAll('.day-type').length,2);choose(p,'month','2027-01');const unknown=p.d.querySelector('[data-date="2027-01-04"]');assert.equal(unknown.disabled,false);assert.ok(unknown.classList.contains('day-unknown'));assert.equal(unknown.querySelectorAll('.day-type').length,0);assert.match(unknown.getAttribute('aria-label'),/미확인|자료 없음|저장/);
+ }finally{p.close();}
+});
+test('carrier date limits accept the final supported day and reject the following day without fetching or inventing records',async()=>{
+ const p=await page();try{await p.ready();const {addDays}=await import('../dist/model.js'),start=p.d.getElementById('start').value,end=p.d.getElementById('end'),calls=p.calls.length;end.value=addDays(start,360);p.d.getElementById('search-form').dispatchEvent(new p.w.Event('submit',{bubbles:true,cancelable:true}));assert.equal(p.d.getElementById('form-error').hidden,true);end.value=addDays(start,361);p.d.getElementById('search-form').dispatchEvent(new p.w.Event('submit',{bubbles:true,cancelable:true}));assert.equal(p.d.getElementById('form-error').hidden,false);assert.equal(p.calls.length,calls);
+ p.d.getElementById('tab-oz').click();await waitFor(()=>p.d.getElementById('load-status').textContent.includes('104개'));end.value=addDays(start,360);p.d.getElementById('search-form').dispatchEvent(new p.w.Event('submit',{bubbles:true,cancelable:true}));assert.equal(p.d.getElementById('form-error').hidden,false);assert.match(p.d.getElementById('form-error').textContent,/359/);
+ }finally{p.close();}
 });
