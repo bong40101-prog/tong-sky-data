@@ -135,3 +135,9 @@ test('carrier date limits accept the final supported day and reject the followin
  p.d.getElementById('tab-oz').click();await waitFor(()=>p.d.getElementById('load-status').textContent.includes('104개'));end.value=addDays(start,360);p.d.getElementById('search-form').dispatchEvent(new p.w.Event('submit',{bubbles:true,cancelable:true}));assert.equal(p.d.getElementById('form-error').hidden,false);assert.match(p.d.getElementById('form-error').textContent,/359/);
  }finally{p.close();}
 });
+
+
+test('main page visibly announces the Korean Air range expansion without a modal or an airline-official claim',async()=>{
+ const p=await page();try{await p.ready();const notice=p.d.getElementById('ke-range-notice');assert.ok(notice);assert.equal(notice.hidden,false);assert.equal(notice.closest('#app-screen').hidden,false);assert.equal(notice.getAttribute('role'),'note');assert.equal(notice.querySelector('strong').textContent,'대한항공 조회기간 확대');assert.match(notice.textContent,/기존 12월 17일 제한을 해제했습니다\. 오늘부터 360일 후까지 조회 범위를 선택할 수 있습니다\./);assert.equal(notice.querySelector('dialog'),null);assert.doesNotMatch(notice.textContent,/공식 발표|공식 공지/);
+ }finally{p.close();}
+});
