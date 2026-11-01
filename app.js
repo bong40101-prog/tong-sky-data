@@ -3,7 +3,7 @@ import {loadSavedDataset,retainUnavailableRegions} from './data.js';
 const $=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const today=todayKST();
-const state={carrier:'KE',origin:'ICN',region:'전체',country:'전체',airport:'전체',query:'',seat:'all',start:today,end:today<='2026-12-17'?'2026-12-17':addDays(today,359),month:today.slice(0,7),direction:'out',selected:null,records:[],routes:[],filtered:[],loading:false};
+const state={carrier:'KE',origin:'ICN',region:'전체',country:'전체',airport:'전체',query:'',seat:'all',start:today,end:addDays(today,360),month:today.slice(0,7),direction:'out',selected:null,records:[],routes:[],filtered:[],loading:false};
 let catalogs,controller,generation=0,bootAttempt=0;const cache=new Map();
 const dateFormat=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const fullTime=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
@@ -28,6 +28,8 @@ function setGeographyOptions(){
  if(state.airport!=='전체'&&!cities.some(c=>c.code===state.airport))state.airport='전체';
  destination.replaceChildren(new Option('전체 도시·공항','전체'));for(const city of cities)destination.add(new Option(city.name+' · '+city.code,city.code));destination.value=state.airport;
 }
+function bookingEnd(){return addDays(today,state.carrier==='KE'?360:359);}
+function setDateLimits(){for(const id of ['start','end']){$(id).min=today;$(id).max=bookingEnd();}}
 function setMonths(){const select=$('month');select.replaceChildren();for(let month=state.start.slice(0,7);month<=state.end.slice(0,7);month=monthStep(month,1))select.add(new Option(monthLabel(month),month));if(state.month<state.start.slice(0,7)||state.month>state.end.slice(0,7))state.month=state.start.slice(0,7);select.value=state.month;}
 function periodFilter(){return {...state,month:undefined,direction:undefined};}
 function stats(){
@@ -112,18 +114,18 @@ async function bootDatasets(force=false){
  }catch{$('boot-stage').textContent='저장 자료에 연결하지 못했습니다.';$('boot-detail').textContent='인터넷 연결 후 다시 불러오기를 눌러주세요.';$('boot-actions').hidden=false;}finally{clearTimeout(timer);}
 }
 function readForm({load=true}={}){
- const origin=$('origin').value.trim().toUpperCase(),start=$('start').value,end=$('end').value;if(!/^[A-Z]{3}$/.test(origin)){formError('기준 공항 코드는 영문 3자리로 입력해주세요.');return false;}if(!validDate(start)||!validDate(end)||start>end){formError('시작일과 종료일을 다시 선택해주세요.');return false;}if(start<today||end>addDays(today,359)){formError('오늘부터 360일 안의 날짜를 선택해주세요.');return false;}
+ const origin=$('origin').value.trim().toUpperCase(),start=$('start').value,end=$('end').value;if(!/^[A-Z]{3}$/.test(origin)){formError('기준 공항 코드는 영문 3자리로 입력해주세요.');return false;}if(!validDate(start)||!validDate(end)||start>end){formError('시작일과 종료일을 다시 선택해주세요.');return false;}if(start<today||end>bookingEnd()){formError(`오늘부터 ${state.carrier==='KE'?360:359}일 뒤까지 선택할 수 있습니다.`);return false;}
  const changed=state.origin!==origin;Object.assign(state,{origin,start,end,region:$('region').value,country:$('country').value,airport:$('destination').value,seat:$('seat').value,query:'',onlyMarked:$('only-marked').checked});$('origin').value=origin;setGeographyOptions();formError('');setMonths();if(changed&&load)loadData();else{stats();renderRoutes();renderCalendar();}return true;
 }
 async function selectCarrier(carrier){if(state.carrier===carrier)return;state.carrier=carrier;state.seat='all';document.body.dataset.carrier=carrier;
  for(const button of document.querySelectorAll('[data-carrier]')){const active=button.dataset.carrier===carrier;button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;}
- state.end=carrier==='KE'&&today<='2026-12-17'?'2026-12-17':addDays(today,359);$('end').value=state.end;if(state.start>state.end){state.start=today;$('start').value=today;}setOptions();setMonths();await loadData();}
+ state.end=bookingEnd();setDateLimits();$('end').value=state.end;if(state.start>state.end){state.start=today;$('start').value=today;}setOptions();setMonths();await loadData();}
 async function init(){
  // Official lookup is independent of the saved KE/OZ dataset and never starts collection.
  $('boot-retry').addEventListener('click',()=>catalogs?bootDatasets(true):location.reload());$('boot-continue').addEventListener('click',()=>revealMain());
  catalogs=await fetch('./catalog.json?v=2',{cache:'no-cache'}).then(response=>{if(!response.ok)throw new Error();return response.json();});
  const airports=new Map();for(const catalog of Object.values(catalogs))for(const cities of Object.values(catalog.regions))for(const city of cities)airports.set(city.code,city.name);for(const [code,name] of [...airports].sort()){const option=node('option','');option.value=code;option.label=name;$('airport-options').append(option);}
- for(const id of ['start','end']){$(id).min=today;$(id).max=addDays(today,359);} $('start').value=state.start;$('end').value=state.end;setOptions();setMonths();
+ setDateLimits();$('start').value=state.start;$('end').value=state.end;setOptions();setMonths();
  $('search-form').addEventListener('submit',e=>{e.preventDefault();readForm();});$('origin').addEventListener('input',()=>{$('origin').value=$('origin').value.replace(/[^a-z]/gi,'').toUpperCase();});
  $('region').addEventListener('change',()=>{state.region=$('region').value;state.country='전체';state.airport='전체';setGeographyOptions();readForm();});
  $('country').addEventListener('change',()=>{state.country=$('country').value;state.airport='전체';setGeographyOptions();readForm();});
