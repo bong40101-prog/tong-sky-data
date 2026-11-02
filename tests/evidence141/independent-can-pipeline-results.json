@@ -1,0 +1,61 @@
+{
+  "passed": 25,
+  "failed": 0,
+  "checks": [
+    "source validation and operation policy retain records",
+    "out 2026-11 raw P/U counts retained",
+    "out 2026-11 unverified count stays separate",
+    "out 2026-11 source status never promoted",
+    "out 2026-11 source clocks preserved",
+    "back 2026-11 raw P/U counts retained",
+    "back 2026-11 unverified count stays separate",
+    "back 2026-11 source status never promoted",
+    "back 2026-11 source clocks preserved",
+    "out 2026-12 raw P/U counts retained",
+    "out 2026-12 unverified count stays separate",
+    "out 2026-12 source status never promoted",
+    "out 2026-12 source clocks preserved",
+    "back 2026-12 raw P/U counts retained",
+    "back 2026-12 unverified count stays separate",
+    "back 2026-12 source status never promoted",
+    "back 2026-12 source clocks preserved",
+    "CAN November3 raw P/U cell restored separately",
+    "restored cell explicitly unverified saved aggregate",
+    "proof flags remain false while saved aggregate flags retain original",
+    "December18 cap remains enforced",
+    "future KE month removed from display",
+    "raw records unchanged by entire projection pipeline",
+    "forged future end totals remain capped and unverified",
+    "OZ records unchanged by fallback"
+  ],
+  "nov3": {
+    "label": "저장 표식 · 편별 운항 미대조 · 프레스티지 보너스 저장, 프레스티지 승급 저장",
+    "status": "UNKNOWN",
+    "savedAggregate": {
+      "status": "OBSERVED",
+      "sourceKind": "SAVED_CALENDAR_AGGREGATE",
+      "sourceUpdatedAt": "2026-11-01T23:00:00+09:00",
+      "collectedAt": "2026-11-01T22:17:39.943Z",
+      "economyAward": true,
+      "premiumAward": false,
+      "prestigeAward": true,
+      "premiumUpgrade": false,
+      "prestigeUpgrade": true,
+      "firstCombined": false
+    }
+  },
+  "total": {
+    "marked": 65,
+    "observed": 0,
+    "savedAggregateDays": 92,
+    "noFlight": 0,
+    "months": 4,
+    "latest": 1793571510355,
+    "nearest": "2026-11-03",
+    "byType": {
+      "prestigeAward": 37,
+      "prestigeUpgrade": 65,
+      "firstCombined": 0
+    }
+  }
+}

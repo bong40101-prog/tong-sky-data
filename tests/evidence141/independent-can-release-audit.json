@@ -1,0 +1,22 @@
+{
+  "audit": "independent CAN legacy-display regression",
+  "passed": 40,
+  "failed": 0,
+  "actualRawSourceBlob": "0b139f661736660d4f2e3698b84a44992bfcd1a7",
+  "gitVersionsChecked": [
+    "v101",
+    "v102"
+  ],
+  "canonicalRawFixtureMatchesOriginalCache": true,
+  "pipelineEvidence": "independent-can-pipeline-results.json",
+  "negativeGateEvidence": "independent-negative-gate-results.json",
+  "productionHashes": {
+    "web-tong-sky-141/dist/legacy.js": "5de65a5db136347e528504a9411b7c9557ae50723169d0784ad4633f668c5025",
+    "web-tong-sky-141/dist/model.js": "3c9e6b989902c40319e6758bd3188621b500380494fa21133ee2b4e2ff3ab7b7",
+    "web-tong-sky-141/dist/timetable.js": "637126dedb14c8966813091f7432d271224966c3d945e2b12962fa29eaa7938f",
+    "web-tong-sky-141/dist/operation.js": "137507fdec65c1e32368f12a0b0efbb93d5216f0321ec832f35a0cd7ae0a45d5",
+    "web-tong-sky-141/dist/app.js": "a78077346b00f223a3b0e14cbeaed8c776f2be33d9bc61725df663f593156d2a",
+    "web-tong-sky-141/dist/index.html": "09b64eda0a0377db861be1451f27fafd57f25c102beacff4a770d2875cc3914d"
+  },
+  "limitation": "The saved aggregate display remains explicitly unverified and has no per-flight/operator attribution. No new operating or seat facts are authenticated."
+}

@@ -1,0 +1,21 @@
+{
+  "passed": 15,
+  "failed": 0,
+  "checks": [
+    "baseline actual CAN raw aggregate admitted",
+    "explicit direct reference OFF blocks aggregate",
+    "direct reference unknown on unlisted partial date blocks aggregate",
+    "applicable partner UNKNOWN blocks indivisible aggregate",
+    "applicable partner OFF blocks indivisible aggregate",
+    "schema1 own-only OFF blocks aggregate",
+    "unknown dated flight blocks aggregate",
+    "known off dated flight blocks aggregate",
+    "modern flight detail capture never falls back",
+    "source identity and clocks must match exactly",
+    "stale test starts with restored flag",
+    "reference unavailable strips stale computed saved flag",
+    "model refuses savedAggregate on NO_FLIGHT day",
+    "model refuses savedAggregate on conflicting day",
+    "model refuses savedAggregate after cap"
+  ]
+}

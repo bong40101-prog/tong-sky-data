@@ -1,0 +1,75 @@
+{
+  "change": "Website-only bounded legacy saved aggregate display",
+  "displayCapInclusive": "2026-12-17",
+  "operationStatusPromotion": false,
+  "savedAggregateKind": "SAVED_CALENDAR_AGGREGATE",
+  "actualCanSourceGitBlob": "0b139f661736660d4f2e3698b84a44992bfcd1a7",
+  "actualCanViews": [
+    {
+      "month": "2026-11",
+      "direction": "out",
+      "prestigeAward": 6,
+      "prestigeUpgrade": 17
+    },
+    {
+      "month": "2026-11",
+      "direction": "back",
+      "prestigeAward": 6,
+      "prestigeUpgrade": 15
+    },
+    {
+      "month": "2026-12",
+      "direction": "out",
+      "prestigeAward": 11,
+      "prestigeUpgrade": 16
+    },
+    {
+      "month": "2026-12",
+      "direction": "back",
+      "prestigeAward": 14,
+      "prestigeUpgrade": 17
+    }
+  ],
+  "checks": [
+    {
+      "log": "legacy-model-tests.log",
+      "tests": 47,
+      "pass": 47,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    {
+      "log": "legacy-ui-tests.log",
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    {
+      "log": "display-cap-ui-tests.log",
+      "tests": 4,
+      "pass": 4,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  ],
+  "passed": 52,
+  "files": {
+    "dist/legacy.js": "5de65a5db136347e528504a9411b7c9557ae50723169d0784ad4633f668c5025",
+    "dist/app.js": "a78077346b00f223a3b0e14cbeaed8c776f2be33d9bc61725df663f593156d2a",
+    "dist/model.js": "3c9e6b989902c40319e6758bd3188621b500380494fa21133ee2b4e2ff3ab7b7",
+    "dist/data.js": "4fdf5c96c126c5a0d2b79e9c98c375c7aa193591768845561eea0606b2cae86b",
+    "dist/index.html": "09b64eda0a0377db861be1451f27fafd57f25c102beacff4a770d2875cc3914d",
+    "dist/timetable.js": "637126dedb14c8966813091f7432d271224966c3d945e2b12962fa29eaa7938f",
+    "dist/operation.js": "137507fdec65c1e32368f12a0b0efbb93d5216f0321ec832f35a0cd7ae0a45d5",
+    "dist/timetable-reference.json": "82e27d2974a8ce7105a9563327d6f26ef86433148770fe381fa3f6b1dab6d0e3"
+  },
+  "limitations": [
+    "Saved aggregate symbols are historical observations, not flight-level verified operation or current seat inventory.",
+    "Raw unknown, modern snapshots, official off evidence, and ambiguous operator references are never recovered through aggregate fallback.",
+    "Original cache, source timestamps, histories and native app remain unchanged."
+  ]
+}
