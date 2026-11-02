@@ -1,5 +1,5 @@
-import {repeatMarkerCodeshareFlags,repeatedMarkerScope} from './repeat-markers.js?v=143';
-import {validateClaimedOperationSnapshot} from './operation.js?v=143';
+import {repeatMarkerCodeshareFlags,repeatedMarkerScope} from './repeat-markers.js?v=144';
+import {validateClaimedOperationSnapshot} from './operation.js?v=144';
 export const BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v102/';
 export const OZ_BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v101/';
 export const FIELDS=['prestigeAward','prestigeUpgrade','firstCombined'];
@@ -8,7 +8,9 @@ export const KE_DISPLAY_END='2026-12-17';
 export function isExtendedKeRoute(record,catalog){return record?.carrier!=='OZ'&&Boolean(catalog?repeatedMarkerScope({...record,carrier:'KE'},catalog):record?.keFutureVisible||record?.region==='유럽'||record?.countryCode==='US'||['EUROPE','US'].includes(record?.repeatMarkerPolicy?.scope));}
 export function limitDisplayRecords(records,catalog){return records.flatMap(r=>{if(r.carrier!=='KE')return [r];const extended=isExtendedKeRoute(r,catalog);if(!extended&&r.month>KE_DISPLAY_END.slice(0,7))return [];return [{...r,keFutureVisible:extended,dates:r.dates.filter(d=>extended||d.date<=KE_DISPLAY_END).map(d=>({...d,keFutureVisible:extended}))}];});}
 export const AIRLINES={KE:{name:'대한항공',cabin:'프레스티지',labels:['프레스티지 보너스','프레스티지 승급','퍼스트 보너스·승급 합산'],source:'https://www.koreanair.com/booking/book-and-manage/award-seat-availability'},OZ:{name:'아시아나',cabin:'비즈니스',labels:['비즈니스 보너스','비즈니스 승급'],source:'https://flyasiana.com/I/KR/KO/MileageSeatSearch.do'}};
-export const REGIONS=['유럽','미주','동남아시아/서남아시아','동북아시아','대양주/괌','러시아/몽골/중앙아시아','중동/아프리카','대한민국'];
+export const EXCLUDED_REGIONS=['동북아시아','대한민국'];
+export const REGIONS=['유럽','미주','동남아시아/서남아시아','대양주/괌','러시아/몽골/중앙아시아','중동/아프리카'];
+export function isExcludedRecord(record,catalog,origin){const code=record.origin===origin?record.destination:record.origin;return EXCLUDED_REGIONS.some(region=>(catalog?.regions?.[region]??[]).some(city=>city.code===code));}
 export class DataError extends Error{}
 export function todayKST(now=new Date()){
  const p=new Intl.DateTimeFormat('en',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
@@ -46,7 +48,7 @@ export function readDocument(body,{carrier,origin,region,now=Date.now()}){
  if(body?.schema!==1||body.origin!==origin||body.region!==region||!body.records||Array.isArray(body.records)||typeof body.records!=='object'||Object.keys(body.records).length>5000)throw new DataError('출발지·지역이 다른 저장 자료입니다.');
  return Object.entries(body.records).map(([key,payload])=>validateRecord(key,payload,{carrier,origin,now}));
 }
-export function cityIndex(catalog){const cities=new Map();for(const [region,items] of Object.entries(catalog.regions))for(const city of items)cities.set(city.code,{...city,region});return cities;}
+export function cityIndex(catalog){const cities=new Map();for(const [region,items] of Object.entries(catalog.regions))if(!EXCLUDED_REGIONS.includes(region))for(const city of items)cities.set(city.code,{...city,region});return cities;}
 export function countriesFor(catalog,region='전체'){
  const countries=new Map();for(const city of cityIndex(catalog).values())if((region==='전체'||city.region===region)&&city.countryCode)countries.set(city.countryCode,city.country);
  return [...countries].map(([code,name])=>({code,name})).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
@@ -56,7 +58,7 @@ export function airportsFor(catalog,{region='전체',country='전체',origin}={}
 }
 export function makeRoutes(records,catalog,origin){
  const cities=cityIndex(catalog),routes=new Map();
- for(const raw of records){const record=raw.carrier==='KE'?limitDisplayRecords([raw],catalog)[0]:raw;if(!record)continue;const code=record.origin===origin?record.destination:record.origin,city=cities.get(code);if(!routes.has(code))routes.set(code,{code,name:city?.name??code,region:city?.region??'기타',countryCode:city?.countryCode??'',country:city?.country??'',keFutureVisible:record.keFutureVisible??false,legs:{out:new Map(),back:new Map()}});const leg=record.origin===origin?'out':'back',months=routes.get(code).legs[leg],old=months.get(record.month);if(!old||old.success<record.success)months.set(record.month,record);}
+ for(const raw of records){if(isExcludedRecord(raw,catalog,origin))continue;const record=raw.carrier==='KE'?limitDisplayRecords([raw],catalog)[0]:raw;if(!record)continue;const code=record.origin===origin?record.destination:record.origin,city=cities.get(code);if(!routes.has(code))routes.set(code,{code,name:city?.name??code,region:city?.region??'기타',countryCode:city?.countryCode??'',country:city?.country??'',keFutureVisible:record.keFutureVisible??false,legs:{out:new Map(),back:new Map()}});const leg=record.origin===origin?'out':'back',months=routes.get(code).legs[leg],old=months.get(record.month);if(!old||old.success<record.success)months.set(record.month,record);}
  return [...routes.values()];
 }
 export function summarize(route,{carrier,seat='all',start,end,month:chosenMonth,direction}){

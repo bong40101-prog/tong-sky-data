@@ -1,4 +1,4 @@
-import {BASE,OZ_BASE,REGIONS,readDocument,unpackDocument} from './model.js?v=143';
+import {BASE,OZ_BASE,REGIONS,readDocument,unpackDocument,isExcludedRecord} from './model.js?v=144';
 export function sourcesFor(catalogs,carriers){
  return carriers.flatMap(carrier=>carrier==='OZ'?[{carrier,id:'asiana',region:'아시아나'}]:REGIONS.filter(region=>catalogs.KE.ids[region]).map(region=>({carrier,id:catalogs.KE.ids[region],region})));
 }
@@ -7,7 +7,7 @@ function asianaGroups(body,catalog,origin){
  if(body?.schema!==1||body.origin!==origin||body.region!=='아시아나'||!body.records||Array.isArray(body.records)||typeof body.records!=='object'||Object.keys(body.records).length>5000)throw new Error('아시아나 저장 자료 형식 오류');
  const names=asianaLoadRegions(catalog),groups=new Map(names.map(name=>[name,{}])),airports=new Map();
  for(const name of names)for(const city of catalog.regions[name]??[])airports.set(city.code,name);
- for(const [key,payload] of Object.entries(body.records)){const current=payload?.current,code=current?.origin===origin?current?.destination:current?.origin;groups.get(airports.get(code)??'기타')[key]=payload;}
+ for(const [key,payload] of Object.entries(body.records)){const current=payload?.current;if(current&&isExcludedRecord(current,catalog,origin))continue;const code=current?.origin===origin?current?.destination:current?.origin;groups.get(airports.get(code)??'기타')[key]=payload;}
  return names.map(region=>({region,body:{...body,records:groups.get(region)}}));
 }
 export function retainUnavailableRegions(next,previous=[]){
