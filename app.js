@@ -103,7 +103,7 @@ function renderCalendar(){
 function renderRepeatSummary(record){
  const target=$('repeat-marker-summary'),policy=record?.repeatMarkerPolicy;target.replaceChildren();target.hidden=!policy||(!policy.weekdays.length&&!policy.reviews.length);if(target.hidden)return;
  const labels=['일','월','화','수','목','금','토'];
- if(policy.evidence.length)target.append(node('strong','','반복 표식 기준 비운항 추정'),node('p','',policy.evidence.map(p=>`${labels[p.weekday]}요일 ${p.dates.length}/${p.dates.length}일`).join(' · ')+' — 같은 요일 전체에 원본 세 표식이 있어 해당 날짜를 제외합니다.'));
+ if(policy.evidence.length)target.append(node('strong','','대한항공 비운항'),node('p','codeshare-note','공동운항 있을 수 있음'),node('p','',policy.evidence.map(p=>`${labels[p.weekday]}요일 ${p.dates.length}/${p.dates.length}일`).join(' · ')+' — 같은 요일 전체에 원본 세 표식이 있어 해당 날짜를 제외합니다.'));
  if(policy.reviews.length)target.append(node('strong','repeat-review-title','확인필요'),node('p','repeat-review-copy',policy.reviews.map(p=>`${labels[p.weekday]}요일 ${p.matchedDates.length}/${p.dates.length}일 일치 · 확인 날짜 ${p.checkDates.map(d=>Number(d.slice(8))+'일').join(', ')}`).join(' / ')+' — 이 요일은 제외하지 않습니다.'));
 }
 function renderRepeatHistory(route){
