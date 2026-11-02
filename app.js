@@ -28,7 +28,7 @@ function setOptions(){
  $('seat').replaceChildren();const options=state.carrier==='OZ'?['비즈니스 전체','비즈니스 보너스','비즈니스 승급']:['프레스티지·퍼스트 전체','프레스티지 보너스','프레스티지 승급','퍼스트 보너스·승급 합산'];
  for(let i=0;i<options.length;i++){const option=node('option','',options[i]);option.value=i===0?'all':String(i-1);$('seat').append(option);}$('seat').value=state.seat;
  const regions=$('region');regions.replaceChildren(new Option('전체 대륙·지역','전체'));for(const region of REGIONS)if(catalogs[state.carrier].regions[region]?.length)regions.add(new Option(region,region));if(![...regions.options].some(o=>o.value===state.region)){state.region='전체';state.country='전체';state.airport='전체';}regions.value=state.region;setGeographyOptions();
- $('ke-range-notice').hidden=state.carrier!=='KE';$('ke-nonoperation-notice').hidden=state.carrier!=='KE';$('repeat-history').hidden=state.carrier!=='KE';
+ $('ke-range-notice').hidden=state.carrier!=='KE';$('repeat-history').hidden=state.carrier!=='KE';
  $('first-note').hidden=state.carrier==='OZ';$('seat-help').replaceChildren(node('strong','','보너스'),document.createTextNode(' = 마일리지로 발권 · '),node('strong','','승급'),document.createTextNode(' = 좌석 업그레이드'),node('br'),document.createTextNode(state.carrier==='KE'?'프레스티지 = 비즈니스석 · 퍼스트 = 일등석':'아시아나는 비즈니스석의 보너스·승급을 구분합니다.'));$('official-link').href=AIRLINES[state.carrier].source;
  const legend=$('legend');legend.replaceChildren();AIRLINES[state.carrier].labels.forEach((label,i)=>{const item=node('span','legend-item');item.append(node('i','marker mark-'+i),document.createTextNode(label));legend.append(item);});const unknown=node('span','legend-item');unknown.append(node('i','marker unknown-dot'),document.createTextNode('미확인'));legend.append(unknown);
 }
