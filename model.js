@@ -32,7 +32,7 @@ export function validateRecord(key,payload,{carrier,origin,now=Date.now()}){
  if(!/^[A-Z]{3}$/.test(c.origin)||!/^[A-Z]{3}$/.test(c.destination)||c.origin===c.destination||!validMonth(c.month)||key!==`${c.origin}-${c.destination}-${c.month}`||c.origin!==origin&&c.destination!==origin)throw new DataError('저장 노선이 일치하지 않습니다.');
  if(!timestamp(c.sourceUpdatedAt)||!timestamp(c.collectedAt)||!Number.isSafeInteger(payload.success)||payload.success<=0||payload.success<Date.parse(c.collectedAt)||payload.success>now+300000)throw new DataError('자료 수집 시각이 올바르지 않습니다.');
  if(!Array.isArray(c.dates)||c.dates.length!==daysInMonth(c.month))throw new DataError('날짜가 빠진 달력입니다.');
- const seen=new Set();for(const d of c.dates){if(!validDate(d?.date)||d.date.slice(0,7)!==c.month||seen.has(d.date)||!['OBSERVED','UNKNOWN','NO_FLIGHT'].includes(d.status)||ALL_FIELDS.some(field=>typeof d[field]!=='boolean'))throw new DataError('확인되지 않은 날짜 자료입니다.');seen.add(d.date);}
+ const seen=new Set();for(const d of c.dates){if(!validDate(d?.date)||d.date.slice(0,7)!==c.month||seen.has(d.date)||!['OBSERVED','UNKNOWN','NO_FLIGHT'].includes(d.status)||ALL_FIELDS.some(field=>typeof d[field]!=='boolean'))throw new DataError('확인되지 않은 날짜 자료입니다.');if(d.status!=='OBSERVED'&&ALL_FIELDS.some(field=>d[field]))throw new DataError('미확인·비운항 날짜에 좌석 표식이 있습니다.');seen.add(d.date);}
  return {...c,carrier,success:payload.success,dates:c.dates.map(d=>({...d})).sort((a,b)=>a.date.localeCompare(b.date))};
 }
 export function readDocument(body,{carrier,origin,region,now=Date.now()}){
@@ -54,24 +54,24 @@ export function makeRoutes(records,catalog,origin){
 }
 export function summarize(route,{carrier,seat='all',start,end,month:chosenMonth,direction}){
  const fields=selectedFields(carrier),byType=Object.fromEntries(fields.map(field=>[field,0]));
- let marked=0,observed=0,months=0,latest=0,nearest=null;
+ let marked=0,observed=0,noFlight=0,months=0,latest=0,nearest=null;
  for(const [legName,leg] of Object.entries(route.legs))for(const [month,record] of leg){
   if(direction&&legName!==direction||chosenMonth&&month!==chosenMonth)continue;
   if(month<start.slice(0,7)||month>end.slice(0,7))continue;
   months++;latest=Math.max(latest,record.success);
   for(const day of record.dates)if(day.date>=start&&day.date<=end){
-   if(day.status==='OBSERVED'){observed++;for(const field of fields)if(day[field]===true)byType[field]++;}
+   if(day.status==='OBSERVED'){observed++;for(const field of fields)if(day[field]===true)byType[field]++;}else if(day.status==='NO_FLIGHT')noFlight++;
    if(hasMark(day,carrier,seat)){marked++;if(nearest===null||day.date<nearest)nearest=day.date;}
   }
  }
- return {marked,observed,months,latest,nearest,byType};
+ return {marked,observed,noFlight,months,latest,nearest,byType};
 }
 export function filterRoutes(routes,filter){
  const q=(filter.query??'').trim().toLocaleLowerCase();return routes.filter(route=>(filter.region==='전체'||route.region===filter.region)&&(!filter.country||filter.country==='전체'||route.countryCode===filter.country)&&(!filter.airport||filter.airport==='전체'||route.code===filter.airport)&&(!q||`${route.code} ${route.name}`.toLocaleLowerCase().includes(q))).map(route=>({...route,summary:summarize(route,filter)})).filter(route=>route.summary.months>0&&(!filter.onlyMarked||route.summary.marked>0)).sort((a,b)=>(a.summary.nearest??'9999').localeCompare(b.summary.nearest??'9999')||b.summary.marked-a.summary.marked||a.name.localeCompare(b.name,'ko'));
 }
 export function cellInfo(route,direction,date,carrier,seat='all'){
  const record=route?.legs[direction]?.get(date.slice(0,7));const day=record?.dates.find(x=>x.date===date);if(!day||day.status==='UNKNOWN')return {kind:'unknown',label:'미조회·미확인',day,record,marks:[]};
- if(day.status==='NO_FLIGHT')return {kind:'unknown',label:'운항편 없음 · 저장 자료 기준',day,record,marks:[]};
+ if(day.status==='NO_FLIGHT')return {kind:'noflight',label:day.operationSource==='KE_WEEKLY_SCHEDULE'?'운항편 없음 · 공식 스케줄 대조':'운항편 없음 · 저장 자료 기준',day,record,marks:[]};
  const marks=FIELDS.slice(0,carrier==='OZ'?2:3).map((field,i)=>({field,index:i,label:AIRLINES[carrier].labels[i]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&day[m.field]===true);
  return {kind:marks.length?'available':'empty',label:marks.length?marks.map(m=>m.label+' 표시').join(', '):'선택 항목의 공개 표식 없음',day,record,marks};
 }

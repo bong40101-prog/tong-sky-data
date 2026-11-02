@@ -1,4 +1,4 @@
-import {BASE,REGIONS,readDocument,unpackDocument} from './model.js';
+import {BASE,REGIONS,readDocument,unpackDocument} from './model.js?v=137';
 export function sourcesFor(catalogs,carriers){
  return carriers.flatMap(carrier=>carrier==='OZ'?[{carrier,id:'asiana',region:'아시아나'}]:REGIONS.filter(region=>catalogs.KE.ids[region]).map(region=>({carrier,id:catalogs.KE.ids[region],region})));
 }

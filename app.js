@@ -1,10 +1,13 @@
-import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor} from './model.js';
-import {loadSavedDataset,retainUnavailableRegions} from './data.js';
+import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor} from './model.js?v=137';
+import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=137';
+import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=137';
 const $=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const today=todayKST();
 const state={carrier:'KE',origin:'ICN',region:'전체',country:'전체',airport:'전체',query:'',seat:'all',start:today,end:addDays(today,360),month:today.slice(0,7),direction:'out',selected:null,records:[],routes:[],filtered:[],loading:false};
-let catalogs,controller,generation=0,bootAttempt=0;const cache=new Map();
+let catalogs,controller,generation=0,bootAttempt=0,operationPolicy={schema:1,weeks:[]},operationWarning='';const cache=new Map();
+async function readOperationPolicy(force,signal){try{return {policy:await loadOperationPolicy({force,signal}),warning:''};}catch{return {policy:null,warning:'운항 대조 자료에 연결하지 못했습니다. 마지막으로 확인된 제외 기준을 유지하며, 전체 노선의 운항 여부가 확인된 것은 아닙니다.'};}}
+function acceptOperationPolicy(result){if(result.policy)operationPolicy=result.policy;operationWarning=result.warning;}
 const dateFormat=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const fullTime=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const displayDate=d=>d?`${Number(d.slice(5,7))}.${d.slice(8,10)}`:'—';
@@ -42,8 +45,8 @@ function typeCounts(summary,cls,compact=false){
  AIRLINES[state.carrier].labels.forEach((label,i)=>{
   if(state.seat!=='all'&&state.seat!==String(i))return;
   const row=node('div','type-count-row type-'+i+(state.seat!=='all'&&state.seat!==String(i)?' other-type':''));
-  row.dataset.field=FIELDS[i];const value=summary.observed?`${summary.byType[FIELDS[i]]}일`:'미확인';
-  const name=node('span','type-name',compact?['보너스','승급','퍼스트'][i]:label);name.title=label;row.append(name,node('strong',summary.observed&&summary.byType[FIELDS[i]]?'type-positive':'',value));counts.append(row);
+  row.dataset.field=FIELDS[i];const value=(summary.observed+summary.noFlight)?`${summary.byType[FIELDS[i]]}일`:'미확인';
+  const name=node('span','type-name',compact?['보너스','승급','퍼스트'][i]:label);name.title=label;row.append(name,node('strong',(summary.observed+summary.noFlight)&&summary.byType[FIELDS[i]]?'type-positive':'',value));counts.append(row);
  });counts.dataset.count=String(counts.children.length);return counts;
 }
 function periodTotals(route){
@@ -55,7 +58,7 @@ function periodTotals(route){
   if(state.seat!=='all'&&state.seat!==String(i))return;
   const row=node('div','total-count-row type-'+i);row.dataset.totalField=FIELDS[i];row.append(node('span','type-name',label));
   for(const [direction,summary] of [['out',out],['back',back]]){
-   const value=summary.observed?`${summary.byType[FIELDS[i]]}일`:'미확인',count=node('strong',summary.observed&&summary.byType[FIELDS[i]]?'type-positive':'',value);count.dataset.direction=direction;count.setAttribute('aria-label',`${direction==='out'?'가는 편':'오는 편'} 전체 ${label} ${value}`);row.append(count);
+   const value=(summary.observed+summary.noFlight)?`${summary.byType[FIELDS[i]]}일`:'미확인',count=node('strong',(summary.observed+summary.noFlight)&&summary.byType[FIELDS[i]]?'type-positive':'',value);count.dataset.direction=direction;count.setAttribute('aria-label',`${direction==='out'?'가는 편':'오는 편'} 전체 ${label} ${value}`);row.append(count);
   }grid.append(row);
  });return grid;
 }
@@ -80,7 +83,7 @@ function renderCalendar(){
  const offset=new Date(state.month+'-01T00:00:00Z').getUTCDay();for(let i=0;i<offset;i++){const blank=node('div','day-blank');blank.setAttribute('aria-hidden','true');grid.append(blank);}
  for(let day=1;day<=daysInMonth(state.month);day++){const date=`${state.month}-${String(day).padStart(2,'0')}`,inRange=date>=state.start&&date<=state.end,info=inRange?cellInfo(route,state.direction,date,state.carrier,state.seat):{kind:'outside',label:'선택 기간 밖',marks:[]},button=node('button','day day-'+info.kind),weekday=(offset+day-1)%7;button.type='button';button.dataset.date=date;
  if(weekday===0)button.classList.add('sunday');if(weekday===6)button.classList.add('saturday');if(date===today)button.classList.add('today');button.disabled=!route||!inRange;button.setAttribute('aria-label',`${date} · ${info.label}${date===today?' · 오늘':''}`);
- button.append(node('span','day-number',String(day)));const marks=node('span','day-marks');for(const mark of info.marks){const chip=node('span','day-type day-type-'+mark.index,['보너스','승급','퍼스트'][mark.index]);chip.title=mark.label;chip.setAttribute('aria-hidden','true');marks.append(chip);}if(info.kind==='unknown')marks.append(node('span','day-unknown','—'));if(!inRange)marks.append(node('span','day-outside-note','기간 밖'));button.append(marks);button.addEventListener('click',()=>openDay(date,info));grid.append(button);}
+ button.append(node('span','day-number',String(day)));const marks=node('span','day-marks');for(const mark of info.marks){const chip=node('span','day-type day-type-'+mark.index,['보너스','승급','퍼스트'][mark.index]);chip.title=mark.label;chip.setAttribute('aria-hidden','true');marks.append(chip);}if(info.kind==='unknown')marks.append(node('span','day-unknown','—'));if(info.kind==='noflight')marks.append(node('span','day-no-flight','비운항'));if(!inRange)marks.append(node('span','day-outside-note','기간 밖'));button.append(marks);button.addEventListener('click',()=>openDay(date,info));grid.append(button);}
  const badge=$('fresh-badge');badge.hidden=!record;
  if(record){$('calendar-source').textContent=`수집 ${fullTime.format(record.success)} · 한국시간`;const fresh=todayKST(new Date(record.success))===today;badge.textContent=fresh?'오늘 수집':'이전 수집 자료';badge.classList.toggle('old',!fresh);}
  else $('calendar-source').textContent=route?'이 방향·월은 저장 자료가 없습니다.':'노선을 선택하면 수집 시각을 볼 수 있습니다.';
@@ -89,27 +92,27 @@ function updateView(){stats();renderRoutes();renderCalendar();}
 function openDay(date,info){
  const route=currentRoute();if(!route)return;$('day-title').textContent=new Intl.DateTimeFormat('ko-KR',{month:'long',day:'numeric',weekday:'long',timeZone:'UTC'}).format(new Date(date+'T00:00:00Z'));
  $('day-route').textContent=`${AIRLINES[state.carrier].name} · ${state.direction==='out'?state.origin:route.code} → ${state.direction==='out'?route.code:state.origin}`;const markers=$('day-markers');markers.replaceChildren();
- if(info.kind==='unknown')markers.append(node('p','unknown-message',info.label+' · 좌석 여부를 판단할 수 없습니다.'));else AIRLINES[state.carrier].labels.forEach((label,i)=>{if(state.seat!=='all'&&state.seat!==String(i))return;const row=node('div','day-marker-row'),name=node('span','');name.append(node('i','marker mark-'+i),document.createTextNode(label));row.append(name,node('strong',info.day[FIELDS[i]]?'positive':'',info.day[FIELDS[i]]?'표시 있음':'공개 표식 없음'));markers.append(row);});
+ if(info.kind==='unknown')markers.append(node('p','unknown-message',info.label+' · 좌석 여부를 판단할 수 없습니다.'));else if(info.kind==='noflight')markers.append(node('p','unknown-message',info.label+' · 좌석 표식과 합계에서 제외했습니다.'));else AIRLINES[state.carrier].labels.forEach((label,i)=>{if(state.seat!=='all'&&state.seat!==String(i))return;const row=node('div','day-marker-row'),name=node('span','');name.append(node('i','marker mark-'+i),document.createTextNode(label));row.append(name,node('strong',info.day[FIELDS[i]]?'positive':'',info.day[FIELDS[i]]?'표시 있음':'공개 표식 없음'));markers.append(row);});
  $('day-times').replaceChildren();if(info.record){$('day-times').append(node('p','',`항공사 기준 ${fullTime.format(new Date(info.record.sourceUpdatedAt))}`),node('p','',`실제 수집 ${fullTime.format(info.record.success)}`));}else $('day-times').append(node('p','','저장된 수집 시각 없음'));
  $('day-dialog').showModal();
 }
-function finishData(records,errors){state.records=records;state.routes=makeRoutes(records,catalogs[state.carrier],state.origin);state.loading=false;$('refresh').disabled=false;status(records.length?`저장 ${records.length}개 노선·월 연결됨`:'저장된 자료 없음',records.length?'ready':'');message(errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 새 자료 불러오기로 다시 확인할 수 있습니다.':'');stats();renderRoutes();renderCalendar();}
+function finishData(records,errors){const masked=applyOperationPolicy(records,operationPolicy);state.records=masked.records;state.routes=makeRoutes(state.records,catalogs[state.carrier],state.origin);state.loading=false;$('refresh').disabled=false;status(state.records.length?`저장 ${state.records.length}개 노선·월 연결됨`:'저장된 자료 없음',state.records.length?'ready':'');message([errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 새 자료 불러오기로 다시 확인할 수 있습니다.':'',operationWarning,masked.warnings.length?'운항 대조 자료가 올바르지 않은 일부 저장 결과는 표시에서 제외했습니다.':''].filter(Boolean).join(' '));stats();renderRoutes();renderCalendar();}
 async function loadData(force=false){
  const id=++generation;controller?.abort();controller=new AbortController();const own=controller,carrier=state.carrier,origin=state.origin,key=`${carrier}:${origin}`;state.loading=true;state.selected=null;state.records=[];state.routes=[];message('');status('저장 자료 불러오는 중');$('refresh').disabled=true;stats();renderRoutes();renderCalendar();
  const cached=cache.get(key);if(!force&&cached&&Date.now()-cached.at<60000){finishData(cached.records,cached.errors);return;}
  const timer=setTimeout(()=>own.abort(new Error('연결 시간 초과')),25000);
- try{const data=await loadSavedDataset({catalogs,carriers:[carrier],origin,signal:own.signal,force,onProgress:p=>{if(id===generation)status(`저장 자료 ${p.completed}/${p.total} 불러오는 중`);}});if(id===generation){const result=retainUnavailableRegions(data.results[carrier],cached?.records);cache.set(key,{...result,at:Date.now()});finishData(result.records,result.errors);}}
+ try{const [data,operation]=await Promise.all([loadSavedDataset({catalogs,carriers:[carrier],origin,signal:own.signal,force,onProgress:p=>{if(id===generation)status(`저장 자료 ${p.completed}/${p.total} 불러오는 중`);}}),readOperationPolicy(force,own.signal)]);if(id===generation){acceptOperationPolicy(operation);const result=retainUnavailableRegions(data.results[carrier],cached?.records);cache.set(key,{...result,at:Date.now()});finishData(result.records,result.errors);}}
  catch{if(id===generation)finishData(cached?.records??[],['저장 자료 연결 실패']);}finally{clearTimeout(timer);}
 }
 async function revealMain(){await loadData();$('boot-screen').hidden=true;$('app-screen').hidden=false;}
 async function bootDatasets(force=false){
  const attempt=++bootAttempt;controller?.abort();controller=new AbortController();const own=controller;$('boot-actions').hidden=true;$('boot-progress').value=0;$('boot-percent').textContent='0%';$('boot-stage').textContent='저장 자료 연결 중';$('boot-detail').textContent='대한항공 · 아시아나 달력을 준비합니다.';
  const timer=setTimeout(()=>own.abort(new Error('연결 시간 초과')),25000);
- try{const data=await loadSavedDataset({catalogs,carriers:['KE','OZ'],origin:state.origin,signal:own.signal,force,onProgress:p=>{if(attempt!==bootAttempt)return;const percent=Math.floor(p.completed*100/p.total);$('boot-progress').value=percent;$('boot-percent').textContent=percent+'%';$('boot-stage').textContent=AIRLINES[p.source.carrier].name+' · '+p.source.region;$('boot-detail').textContent=`${p.completed}/${p.total}개 저장 자료 불러오기 완료`;}});
-  if(attempt!==bootAttempt)return;
+ try{const [data,operation]=await Promise.all([loadSavedDataset({catalogs,carriers:['KE','OZ'],origin:state.origin,signal:own.signal,force,onProgress:p=>{if(attempt!==bootAttempt)return;const percent=Math.floor(p.completed*100/p.total);$('boot-progress').value=percent;$('boot-percent').textContent=percent+'%';$('boot-stage').textContent=AIRLINES[p.source.carrier].name+' · '+p.source.region;$('boot-detail').textContent=`${p.completed}/${p.total}개 저장 자료 불러오기 완료`;}}),readOperationPolicy(force,own.signal)]);
+  if(attempt!==bootAttempt)return;acceptOperationPolicy(operation);
   for(const [carrier,result] of Object.entries(data.results)){const key=`${carrier}:${state.origin}`,merged=retainUnavailableRegions(result,cache.get(key)?.records);data.results[carrier]=merged;cache.set(key,{...merged,at:Date.now()});}
-  const total=Object.values(data.results).reduce((n,r)=>n+r.records.length,0),failed=Object.values(data.results).some(r=>r.errors.length>0);
-  if(failed){$('boot-stage').textContent='일부 자료 연결을 확인하지 못했습니다.';$('boot-detail').textContent=`불러온 ${total}개 노선·월은 유지됩니다. 다시 시도하거나 불러온 자료로 볼 수 있습니다.`;$('boot-actions').hidden=false;}
+  const total=Object.values(data.results).reduce((n,r)=>n+r.records.length,0),failed=Object.values(data.results).some(r=>r.errors.length>0)||Boolean(operationWarning);
+  if(failed){$('boot-stage').textContent=operationWarning?'운항 대조 자료 연결을 확인하지 못했습니다.':'일부 자료 연결을 확인하지 못했습니다.';$('boot-detail').textContent=`불러온 ${total}개 노선·월은 유지됩니다. 다시 시도하거나 불러온 자료로 볼 수 있습니다.`;$('boot-actions').hidden=false;}
   else{$('boot-progress').value=100;$('boot-percent').textContent='100%';$('boot-stage').textContent='저장 자료 불러오기 완료';$('boot-detail').textContent=`${total}개 노선·월 · 메인 화면으로 이동합니다.`;await revealMain();}
  }catch{$('boot-stage').textContent='저장 자료에 연결하지 못했습니다.';$('boot-detail').textContent='인터넷 연결 후 다시 불러오기를 눌러주세요.';$('boot-actions').hidden=false;}finally{clearTimeout(timer);}
 }
