@@ -13,8 +13,9 @@ function normalizeEvent(value) {
   const dates = Array.isArray(value.dates) ? [...new Set(value.dates)].filter(date => validDate(date) && date.slice(0, 7) === value.month && new Date(date + 'T00:00:00Z').getUTCDay() === value.weekday).sort() : [];
   if (!dates.length || dates.length > 5 || dates.length !== value.dates.length) return null;
   const matchedDates = value.kind === 'EXCLUDED' ? [...dates] : Array.isArray(value.matchedDates) ? [...new Set(value.matchedDates)].filter(date => dates.includes(date)).sort() : [];
-  const checkDates = dates.filter(date => !matchedDates.includes(date));
-  if (value.kind === 'REVIEW' && (!matchedDates.length || !checkDates.length)) return null;
+  const hasReference=value.source==='USER_REFERENCE_MONTH_TRIPLET_V3'&&validDate(value.referenceMonth+'-01')&&value.referenceMonth!==value.month&&['JANUARY_FOR_DECEMBER','PREVIOUS_COMPLETE_MONTH'].includes(value.referenceMode);
+  const checkDates = hasReference&&Array.isArray(value.checkDates)?[...new Set(value.checkDates)].filter(date=>dates.includes(date)).sort():dates.filter(date => !matchedDates.includes(date));
+  if (value.kind === 'REVIEW' && ((!matchedDates.length&&!hasReference) || !checkDates.length)) return null;
   const issues = Array.isArray(value.issues) ? value.issues.filter(issue => issue && checkDates.includes(issue.date) && typeof issue.reason === 'string').map(issue => ({ date: issue.date, reason: issue.reason.slice(0, 160) })).sort((a, b) => a.date.localeCompare(b.date) || a.reason.localeCompare(b.reason)) : [];
   return {
     carrier: 'KE', origin: value.origin, destination: value.destination,
@@ -23,7 +24,8 @@ function normalizeEvent(value) {
     collectedAt: clock(value.collectedAt), sourceUpdatedAt: clock(value.sourceUpdatedAt),
     success: Number.isFinite(value.success) && value.success >= 0 ? value.success : null,
     source: typeof value.source === 'string' ? value.source.slice(0, 80) : '',
-    scope: ['EUROPE', 'US'].includes(value.scope) ? value.scope : null
+    scope: ['EUROPE', 'US','AMERICAS','OCEANIA'].includes(value.scope) ? value.scope : null,
+    ...(hasReference?{referenceMode:value.referenceMode,referenceMonth:value.referenceMonth,referenceStatus:['COMPLETE','INCOMPLETE','MISSING'].includes(value.referenceStatus)?value.referenceStatus:'MISSING',referenceDates:Array.isArray(value.referenceDates)?[...new Set(value.referenceDates)].filter(date=>validDate(date)&&date.slice(0,7)===value.referenceMonth&&new Date(date+'T00:00:00Z').getUTCDay()===value.weekday).sort().slice(0,5):[],referenceSuccess:Number.isFinite(value.referenceSuccess)&&value.referenceSuccess>=0?value.referenceSuccess:null}:{})
   };
 }
 
@@ -75,7 +77,7 @@ export function readRepeatHistory(storage) {
 }
 
 export function serializeRepeatHistory(events) {
-  return JSON.stringify({ schema: 1, scope: 'browser-local', notice: '이 브라우저에서 확인한 비운항 추정·확인필요 판정 기록입니다. 시각은 원본 수집 기준이며, 원본 달력의 세 표식 반복만 판정에 사용합니다. 공동운항 스케줄은 별도로 대조하지 않습니다.', events: mergeRepeatHistory([], events) }, null, 2);
+  return JSON.stringify({ schema: 1, scope: 'browser-local', notice: '이 브라우저에서 확인한 대한항공 비운항·확인필요 판정 기록입니다. 시각은 원본 수집 기준이며, 원본 달력의 세 표식 반복과 기록된 참고월을 판정에 사용합니다. 공동운항 있을 수 있음.', events: mergeRepeatHistory([], events) }, null, 2);
 }
 
 export function writeRepeatHistory(events, storage) {

@@ -1,11 +1,11 @@
-import {repeatMarkerCodeshareFlags,repeatMarkerReviewFlags,savedCalendarFlags,repeatedMarkerScope} from './repeat-markers.js?v=148';
+import {repeatMarkerCodeshareFlags,repeatMarkerReviewFlags,savedCalendarFlags,repeatedMarkerScope} from './repeat-markers.js?v=153';
 import {validateClaimedOperationSnapshot} from './operation.js?v=148';
 export const BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v103/';
 export const OZ_BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v101/';
 export const FIELDS=['prestigeAward','prestigeUpgrade','firstCombined'];
 export const ALL_FIELDS=['economyAward','premiumAward','prestigeAward','premiumUpgrade','prestigeUpgrade','firstCombined'];
 export const KE_DISPLAY_END='2026-12-17';
-export function isExtendedKeRoute(record,catalog){return record?.carrier!=='OZ'&&Boolean(catalog?repeatedMarkerScope({...record,carrier:'KE'},catalog):record?.keFutureVisible||record?.region==='유럽'||record?.countryCode==='US'||['EUROPE','US'].includes(record?.repeatMarkerPolicy?.scope));}
+export function isExtendedKeRoute(record,catalog){return record?.carrier!=='OZ'&&Boolean(catalog?repeatedMarkerScope({...record,carrier:'KE'},catalog):record?.keFutureVisible||record?.region==='유럽'||record?.countryCode==='US'||['EUROPE','US','AMERICAS','OCEANIA'].includes(record?.repeatMarkerPolicy?.scope));}
 export function limitDisplayRecords(records,catalog){return records.flatMap(r=>{if(r.carrier!=='KE')return [r];const extended=isExtendedKeRoute(r,catalog);if(!extended&&r.month>KE_DISPLAY_END.slice(0,7))return [];return [{...r,keFutureVisible:extended,dates:r.dates.filter(d=>extended||d.date<=KE_DISPLAY_END).map(d=>({...d,keFutureVisible:extended}))}];});}
 export const AIRLINES={KE:{name:'대한항공',cabin:'프레스티지',labels:['프레스티지 보너스','프레스티지 승급','퍼스트 보너스·승급 합산'],source:'https://www.koreanair.com/booking/book-and-manage/award-seat-availability'},OZ:{name:'아시아나',cabin:'비즈니스',labels:['비즈니스 보너스','비즈니스 승급'],source:'https://flyasiana.com/I/KR/KO/MileageSeatSearch.do'}};
 export const EXCLUDED_REGIONS=['동북아시아','대한민국'];
@@ -82,7 +82,7 @@ export function filterRoutes(routes,filter){
 function baseCellInfo(route,direction,date,carrier,seat='all'){
  if(carrier==='KE'&&!isExtendedKeRoute(route)&&date>KE_DISPLAY_END)return {kind:'outside',label:'대한항공 해당 지역의 임시 조회 범위 밖',marks:[]};
  const sourceRecord=route?.legs[direction]?.get(date.slice(0,7)),sourceDay=sourceRecord?.dates.find(x=>x.date===date),saved=carrier==='KE'?savedAggregateFlags(sourceDay):null;
- if(sourceDay?.repeatMarkerExclusion)return {kind:'unknown',label:'비운항 추정 · 해당 월 동일 요일 전체 세 표식 · 날짜 표식 제외',day:sourceDay,record:sourceRecord,marks:[],repeatMarkerExclusion:sourceDay.repeatMarkerExclusion};
+ if(sourceDay?.repeatMarkerExclusion)return {kind:'unknown',label:'대한항공 비운항 · 공동운항 있을 수 있음 · '+(sourceDay.repeatMarkerExclusion.referenceMonth?sourceDay.repeatMarkerExclusion.referenceMonth+' 같은 요일 참고':'해당 월 동일 요일 전체 세 표식')+' · 날짜 표식 제외',day:sourceDay,record:sourceRecord,marks:[],repeatMarkerExclusion:sourceDay.repeatMarkerExclusion};
  if(sourceDay?.savedCalendar){const source=sourceDay.savedCalendar;if(source.status==='UNKNOWN')return {kind:'unknown',label:'미조회·미확인 · 원본 저장 달력 기준',day:sourceDay,record:sourceRecord,marks:[]};if(source.status==='NO_FLIGHT')return {kind:'noflight',label:'비운항 · 원본 저장 달력 기준',day:sourceDay,record:sourceRecord,marks:[]};const flags=savedCalendarFlags(sourceDay),marks=flags?FIELDS.map((field,index)=>({field,index,label:AIRLINES.KE.labels[index]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&flags[m.field]):[];return {kind:marks.length?'available':'empty',label:'원본 저장 표식'+(marks.length?' · '+marks.map(m=>m.label).join(', '):' · 선택 등급의 표식 없음'),day:sourceDay,record:sourceRecord,marks,savedAggregate:true,flags};}
  const reviewFlags=repeatMarkerReviewFlags(sourceDay);if(reviewFlags){const marks=FIELDS.map((field,index)=>({field,index,label:AIRLINES.KE.labels[index]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&reviewFlags[m.field]);return {kind:marks.length?'available':'empty',label:'확인필요 · 저장 표식 유지'+(marks.length?' · '+marks.map(m=>m.label).join(', '):' · 선택 등급의 저장 표식 없음'),day:sourceDay,record:sourceRecord,marks,savedAggregate:true,flags:reviewFlags};}
  if(saved){const marks=FIELDS.map((field,index)=>({field,index,label:AIRLINES.KE.labels[index]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&saved[m.field]);return {kind:marks.length?'available':'empty',label:'저장 표식 · 편별 운항 미대조'+(marks.length?' · '+marks.map(m=>m.label+' 저장').join(', '):' · 저장 표식 없음'),day:sourceDay,record:sourceRecord,marks,savedAggregate:true,flags:saved};}
@@ -97,5 +97,5 @@ export function monthStep(month,delta){const d=new Date(month+'-01T00:00:00Z');d
 
 export function cellInfo(route,direction,date,carrier,seat='all'){
  const info=baseCellInfo(route,direction,date,carrier,seat),record=info.record??route?.legs[direction]?.get(date.slice(0,7)),review=info.day?.repeatMarkerReview??record?.repeatMarkerPolicy?.reviews.find(r=>r.dates.includes(date));
- return review?{...info,needsReview:true,review,label:info.label+' · 확인필요 · 같은 달 동일 요일의 표식이 서로 다릅니다.'}:info;
+ return review?{...info,needsReview:true,review,label:info.label+' · 확인필요 · '+(review.referenceMonth?review.referenceMonth+' 참고월과 현재 날짜를 대조해야 합니다.':'같은 달 동일 요일의 표식이 서로 다릅니다.')}:info;
 }

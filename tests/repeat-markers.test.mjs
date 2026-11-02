@@ -43,19 +43,19 @@ test('month boundaries and outbound/return directions are isolated',()=>{
  const a=record(),b=record({month:'2026-12'}),c=record({origin:'CDG',destination:'ICN'});d(b,'2026-12-27').prestigeUpgrade=false;d(c,'2026-11-29').prestigeAward=false;
  const out=projectRepeatedMarkerRecords([a,b,c],[a,b,c],catalog);assert.deepEqual(out.map(r=>r.repeatMarkerPolicy.weekdays),[[0],[],[]]);
 });
-test('Europe and US are in scope; Canada, Japan and Asiana are unchanged',()=>{
- for(const [destination,carrier,expected] of [['CDG','KE',true],['JFK','KE',true],['YYZ','KE',false],['NRT','KE',false],['CDG','OZ',false]]){
+test('Europe and Americas are in scope; Japan and Asiana remain unchanged',()=>{
+ for(const [destination,carrier,expected] of [['CDG','KE',true],['JFK','KE',true],['YYZ','KE',true],['NRT','KE',false],['CDG','OZ',false]]){
   const raw=record({destination,carrier}),out=project(raw);assert.equal(Boolean(out.repeatMarkerPolicy),expected);if(!expected)assert.equal(out,raw);
  }
 });
 test('reopened Europe rule still reads the complete raw month rather than the selected first-half range',()=>{
- const raw=record({month:'2026-12'});d(raw,'2026-12-27').prestigeAward=false;
- const [out]=limitDisplayRecords([project(raw)]);assert.equal(out.dates.length,31);assert.equal(d(out,'2026-12-06').repeatMarkerExclusion,undefined);assert.equal(hasMark(d(out,'2026-12-06'),'KE'),true);
- d(raw,'2026-12-27').prestigeAward=true;const [matched]=limitDisplayRecords([project(raw)]);assert.equal(hasMark(d(matched,'2026-12-06'),'KE'),false);assert.equal(matched.repeatMarkerPolicy.evidence[0].dates.length,4);
+ const raw=record({month:'2027-03'});d(raw,'2027-03-28').prestigeAward=false;
+ const [out]=limitDisplayRecords([project(raw)]);assert.equal(out.dates.length,31);assert.equal(d(out,'2027-03-07').repeatMarkerExclusion,undefined);assert.equal(hasMark(d(out,'2027-03-07'),'KE'),true);
+ d(raw,'2027-03-28').prestigeAward=true;const [matched]=limitDisplayRecords([project(raw)]);assert.equal(hasMark(d(matched,'2027-03-07'),'KE'),false);assert.equal(matched.repeatMarkerPolicy.evidence[0].dates.length,4);
 });
 test('calendar, filters and sums consistently exclude matched dates and expose an inference label',()=>{
  const raw=record(),out=project(raw),route=makeRoutes([out],catalog,'ICN')[0],info=cellInfo(route,'out','2026-11-08','KE'),summary=summarize(route,{carrier:'KE',start:'2026-11-01',end:'2026-11-30'});
- assert.equal(info.kind,'unknown');assert.match(info.label,/비운항 추정/);assert.deepEqual(info.marks,[]);assert.equal(hasMark(d(out,'2026-11-08'),'KE'),false);assert.equal(summary.byType.prestigeAward,0);assert.equal(summary.byType.prestigeUpgrade,25);assert.equal(summary.marked,25);
+ assert.equal(info.kind,'unknown');assert.match(info.label,/대한항공 비운항/);assert.deepEqual(info.marks,[]);assert.equal(hasMark(d(out,'2026-11-08'),'KE'),false);assert.equal(summary.byType.prestigeAward,0);assert.equal(summary.byType.prestigeUpgrade,25);assert.equal(summary.marked,25);
 });
 test('V2 projects raw observed calendar flags independently of a prior operation projection',()=>{
  const raw=record(),view=structuredClone(raw);for(const day of view.dates)Object.assign(day,{status:'UNKNOWN',...flags(),legacyAwardFlags:{status:'OBSERVED',...flags(triple)}});
@@ -65,7 +65,7 @@ test('a full-month three-marker weekday suppresses the entire date including con
  const raw=record(),view=structuredClone(raw),partner={number:'KE5901',operatorCode:'AF',serviceKind:'CODESHARE',operationStatus:'OPERATING',awardDataStatus:'CAPTURED',...flags(['prestigeAward'])};
  d(view,'2026-11-08').flights=[{number:'KE901',operatorCode:'KE',serviceKind:'DIRECT',operationStatus:'OPERATING',awardDataStatus:'CAPTURED',...flags(triple)},partner];
  const out=project(raw,view),day=d(out,'2026-11-08'),route=makeRoutes([out],catalog,'ICN')[0],info=cellInfo(route,'out',day.date,'KE');
- assert.equal(hasMark(day,'KE'),false);assert.equal(repeatMarkerCodeshareFlags(day),null);assert.equal(info.kind,'unknown');assert.deepEqual(info.marks,[]);assert.match(info.label,/비운항 추정/);
+ assert.equal(hasMark(day,'KE'),false);assert.equal(repeatMarkerCodeshareFlags(day),null);assert.equal(info.kind,'unknown');assert.deepEqual(info.marks,[]);assert.match(info.label,/대한항공 비운항/);
  assert.equal(summarize(route,{carrier:'KE',start:'2026-11-01',end:'2026-11-30'}).byType.prestigeAward,0);assert.equal(out.repeatMarkerPolicy.source,'USER_ALL_WEEKDAYS_TRIPLET_V2');
 });
 test('calendar triplets establish the same weekday pattern regardless of codeshare-only or unknown flight identities',()=>{
@@ -96,7 +96,7 @@ test('actual Paris December keeps20and27 orange with saved positive badges while
  for(const day of view.dates)Object.assign(day,{status:'NO_FLIGHT',...flags(),operationStatus:'NO_FLIGHT',timetableConflict:true});
  const out=limitDisplayRecords([project(raw,view)],catalog)[0],route=makeRoutes([out],catalog,'ICN')[0];assert.deepEqual(out.repeatMarkerPolicy.weekdays,[]);assert.equal(out.repeatMarkerPolicy.reviews.find(r=>r.weekday===0).matchedDates.length,2);
  for(const date of ['2026-12-20','2026-12-27']){const info=cellInfo(route,'out',date,'KE');assert.equal(info.needsReview,true);assert.equal(info.kind,'available');assert.deepEqual(info.marks.map(mark=>mark.field),['prestigeAward','prestigeUpgrade']);assert.equal(hasMark(d(out,date),'KE'),true);}
- const unknown=cellInfo(route,'out','2026-12-13','KE');assert.equal(unknown.needsReview,true);assert.equal(unknown.kind,'unknown');assert.deepEqual(unknown.marks,[]);assert.equal(hasMark(d(out,'2026-12-13'),'KE'),false);assert.deepEqual(raw,before);
+ const unknown=cellInfo(route,'out','2026-12-13','KE');assert.equal(unknown.needsReview,undefined);assert.equal(unknown.kind,'unknown');assert.deepEqual(unknown.marks,[]);assert.equal(hasMark(d(out,'2026-12-13'),'KE'),false);assert.deepEqual(raw,before);
 });
 test('actual Paris February excludes all four Sundays and never revives a codeshare or first badge',async()=>{
  const body=await unpackDocument(JSON.parse(await readFile(new URL('fixtures/paris-v2-current-records.json',import.meta.url)))),raw=readDocument(body,{carrier:'KE',origin:'ICN',region:'유럽'}).find(r=>r.origin==='ICN'&&r.destination==='CDG'&&r.month==='2027-02'),view=structuredClone(raw);
