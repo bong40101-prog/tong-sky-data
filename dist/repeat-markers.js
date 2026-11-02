@@ -1,5 +1,5 @@
 // User-selected display heuristic, not airline operation evidence.
-const RULE='USER_ALL_WEEKDAYS_TRIPLET_V1';
+const RULE='USER_ALL_WEEKDAYS_TRIPLET_V2';
 const FIELDS=['economyAward','premiumAward','prestigeAward','premiumUpgrade','prestigeUpgrade','firstCombined'];
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const validDate=date=>typeof date==='string'&&DATE.test(date)&&Number.isFinite(Date.parse(date+'T00:00:00Z'))&&new Date(date+'T00:00:00Z').toISOString().slice(0,10)===date;
@@ -14,17 +14,16 @@ export function repeatedMarkerScope(record,catalog){
  }
  return null;
 }
-function observedFlags(day,record,projectedDay){
- if(record.flightDetailPolicyVersion===1){
-  if(day.flightDetailStatus!=='CAPTURED')return null;
-  const rows=day.flightObservations??day.flights??[];
-  const direct=rows.filter(f=>f.operatorCode==='KE'||f.operatorCode===undefined&&(projectedDay?.flights??[]).some(p=>p.number===f.number&&p.departureTime===f.departureTime&&p.operatorCode==='KE'&&p.serviceKind==='DIRECT'));
-  if(!direct.length||direct.some(f=>FIELDS.some(k=>typeof f[k]!=='boolean')))return null;
-  return {status:'OBSERVED',...Object.fromEntries(FIELDS.map(f=>[f,direct.some(r=>r[f])]))};
- }
- const source=day.awardCalendarFlags??day.legacyAwardFlags??day;
+function observedFlags(day){
+ const source=day?.awardCalendarFlags??day?.legacyAwardFlags??day;
  return source?.status==='OBSERVED'&&FIELDS.every(f=>typeof source[f]==='boolean')?source:null;
 }
+function storedCalendar(day){
+ const source=day?.awardCalendarFlags??day?.legacyAwardFlags??day;
+ const status=['OBSERVED','UNKNOWN','NO_FLIGHT'].includes(source?.status)?source.status:'UNKNOWN';
+ return {sourceKind:'SAVED_CALENDAR',status:status==='OBSERVED'&&!FIELDS.every(f=>typeof source[f]==='boolean')?'UNKNOWN':status,...Object.fromEntries(FIELDS.map(f=>[f,status==='OBSERVED'&&source[f]===true]))};
+}
+export function savedCalendarFlags(day){const flags=day?.savedCalendar;return flags?.status==='OBSERVED'&&flags.sourceKind==='SAVED_CALENDAR'&&FIELDS.every(f=>typeof flags[f]==='boolean')?flags:null;}
 export function repeatedMarkerRule(record,catalog,projectedRecord=record){
  const scope=repeatedMarkerScope(record,catalog);if(!scope||!validDate(record.month+'-01'))return null;
  // One snapshot, one direction, one month: no evidence is borrowed across any of them.
@@ -52,22 +51,20 @@ export function projectRepeatedMarkerRecords(rawRecords,records,catalog){
  return records.map(record=>{
   const raw=sources.get(recordKey(record)),rule=raw?repeatedMarkerRule(raw,catalog,record):null;
   if(!rule&&!record.repeatMarkerPolicy)return record;
-  const next={...record};delete next.repeatMarkerPolicy;
+  const next={...record};delete next.repeatMarkerPolicy;const rawDays=new Map((raw?.dates??[]).map(d=>[d.date,d]));
   const weekdays=new Set(rule?.weekdays??[]);
   next.dates=record.dates.map(day=>{
-   const clean={...day};delete clean.repeatMarkerExclusion;delete clean.repeatMarkerReview;
+   const clean={...day};delete clean.repeatMarkerExclusion;delete clean.repeatMarkerReview;delete clean.repeatMarkerReviewFlags;delete clean.savedCalendar;
    if(!rule||!validDate(day.date)||day.date.slice(0,7)!==rule.month)return clean;
-   const wd=weekday(day.date);
+   const original=rawDays.get(day.date);clean.savedCalendar=storedCalendar(original??day);const wd=weekday(day.date);
    if(weekdays.has(wd))clean.repeatMarkerExclusion={source:RULE,kind:'MONTH_WEEKDAY',month:rule.month,weekday:wd,evidenceDates:[...rule.evidence.find(p=>p.weekday===wd).dates]};
-   const review=rule.reviews.find(p=>p.weekday===wd);if(review)clean.repeatMarkerReview={source:RULE,month:rule.month,...review};
+   const review=rule.reviews.find(p=>p.weekday===wd);if(review){clean.repeatMarkerReview={source:RULE,month:rule.month,...review};const flags=observedFlags(original??{});if(flags)clean.repeatMarkerReviewFlags={status:'OBSERVED',sourceKind:'REVIEW_STORED_CALENDAR',...Object.fromEntries(FIELDS.map(f=>[f,flags[f]]))};}
    return clean;
   });
   if(rule)next.repeatMarkerPolicy={...rule,excludedDates:next.dates.filter(d=>d.repeatMarkerExclusion).map(d=>d.date)};
   return next;
  });
 }
-export function repeatMarkerCodeshareFlags(day){
- if(!day?.repeatMarkerExclusion)return null;
- const rows=(day.flights??[]).filter(f=>f.serviceKind==='CODESHARE'&&f.operationStatus==='OPERATING'&&!f.weekdayExcluded&&!f.viewPending&&!f.timetableConflict&&['CAPTURED','NO_MARKS'].includes(f.awardDataStatus));
- return rows.length?{status:'OBSERVED',...Object.fromEntries(FIELDS.map(f=>[f,rows.some(r=>r[f]===true)]))}:null;
-}
+// V2 excludes the entire inferred calendar date. Flight attribution cannot revive it.
+export function repeatMarkerCodeshareFlags(){return null;}
+export function repeatMarkerReviewFlags(day){const flags=day?.repeatMarkerReviewFlags;return day?.repeatMarkerReview&&day.status!=='NO_FLIGHT'&&flags?.status==='OBSERVED'&&flags.sourceKind==='REVIEW_STORED_CALENDAR'&&FIELDS.every(f=>typeof flags[f]==='boolean')?flags:null;}

@@ -57,29 +57,30 @@ test('calendar, filters and sums consistently exclude matched dates and expose a
  const raw=record(),out=project(raw),route=makeRoutes([out],catalog,'ICN')[0],info=cellInfo(route,'out','2026-11-08','KE'),summary=summarize(route,{carrier:'KE',start:'2026-11-01',end:'2026-11-30'});
  assert.equal(info.kind,'unknown');assert.match(info.label,/비운항 추정/);assert.deepEqual(info.marks,[]);assert.equal(hasMark(d(out,'2026-11-08'),'KE'),false);assert.equal(summary.byType.prestigeAward,0);assert.equal(summary.byType.prestigeUpgrade,25);assert.equal(summary.marked,25);
 });
-test('legacy flags are inspected before a prior operation projection masks the aggregate',()=>{
+test('V2 projects raw observed calendar flags independently of a prior operation projection',()=>{
  const raw=record(),view=structuredClone(raw);for(const day of view.dates)Object.assign(day,{status:'UNKNOWN',...flags(),legacyAwardFlags:{status:'OBSERVED',...flags(triple)}});
- const out=project(raw,view);assert.deepEqual(out.repeatMarkerPolicy.weekdays,[0]);assert.equal(d(out,'2026-11-08').status,'UNKNOWN');assert.equal(raw.dates[7].prestigeAward,true);
+ const out=project(raw,view);assert.deepEqual(out.repeatMarkerPolicy.weekdays,[0]);assert.equal(d(out,'2026-11-08').savedCalendar.status,'OBSERVED');assert.equal(raw.dates[7].prestigeAward,true);assert.equal(d(view,'2026-11-08').status,'UNKNOWN');
 });
-test('confirmed codeshare markers survive a direct-flight weekday exclusion',()=>{
+test('a full-month three-marker weekday suppresses the entire date including confirmed codeshare badges',()=>{
  const raw=record(),view=structuredClone(raw),partner={number:'KE5901',operatorCode:'AF',serviceKind:'CODESHARE',operationStatus:'OPERATING',awardDataStatus:'CAPTURED',...flags(['prestigeAward'])};
  d(view,'2026-11-08').flights=[{number:'KE901',operatorCode:'KE',serviceKind:'DIRECT',operationStatus:'OPERATING',awardDataStatus:'CAPTURED',...flags(triple)},partner];
  const out=project(raw,view),day=d(out,'2026-11-08'),route=makeRoutes([out],catalog,'ICN')[0],info=cellInfo(route,'out',day.date,'KE');
- assert.equal(hasMark(day,'KE'),true);assert.equal(repeatMarkerCodeshareFlags(day).prestigeUpgrade,false);assert.equal(info.kind,'available');assert.deepEqual(info.marks.map(m=>m.field),['prestigeAward']);assert.match(info.label,/공동운항편 별도 표시/);
- assert.equal(summarize(route,{carrier:'KE',start:'2026-11-01',end:'2026-11-30'}).byType.prestigeAward,1);
+ assert.equal(hasMark(day,'KE'),false);assert.equal(repeatMarkerCodeshareFlags(day),null);assert.equal(info.kind,'unknown');assert.deepEqual(info.marks,[]);assert.match(info.label,/비운항 추정/);
+ assert.equal(summarize(route,{carrier:'KE',start:'2026-11-01',end:'2026-11-30'}).byType.prestigeAward,0);assert.equal(out.repeatMarkerPolicy.source,'USER_ALL_WEEKDAYS_TRIPLET_V2');
 });
-test('codeshare-only triplets and unknown flight identities never establish a direct-flight rule',()=>{
+test('calendar triplets establish the same weekday pattern regardless of codeshare-only or unknown flight identities',()=>{
  for(const operatorCode of ['AF',undefined]){
   const raw=record();raw.flightDetailPolicyVersion=1;
   for(const day of raw.dates){day.flightDetailStatus='CAPTURED';day.flights=[{number:'KE5901',departureTime:'12:00',operatorCode,...flags(triple)}];}
-  assert.deepEqual(repeatedMarkerRule(raw,catalog).weekdays,[]);
+  assert.deepEqual(repeatedMarkerRule(raw,catalog).weekdays,[0]);
  }
 });
-test('direct-flight detail drives the rule independently from codeshares',()=>{
+test('changing direct-flight or partner detail never changes the raw three-marker calendar decision',()=>{
  const raw=record();raw.flightDetailPolicyVersion=1;
  for(const day of raw.dates){day.flightDetailStatus='CAPTURED';day.flights=[{number:'KE901',departureTime:'12:00',operatorCode:'KE',...Object.fromEntries(ALL_FIELDS.map(f=>[f,day[f]]))},{number:'KE5901',departureTime:'13:00',operatorCode:'AF',...flags(triple)}];}
  assert.deepEqual(repeatedMarkerRule(raw,catalog).weekdays,[0]);
- d(raw,'2026-11-29').flights[0].prestigeAward=false;assert.deepEqual(repeatedMarkerRule(raw,catalog).weekdays,[]);
+ d(raw,'2026-11-29').flights[0].prestigeAward=false;assert.deepEqual(repeatedMarkerRule(raw,catalog).weekdays,[0]);
+ d(raw,'2026-11-29').prestigeAward=false;assert.deepEqual(repeatedMarkerRule(raw,catalog).weekdays,[]);
 });
 test('refresh recomputes the rule without mutating cached inputs or retaining a former exclusion',()=>{
  const raw=record(),old=project(raw),newRaw=structuredClone(raw);d(newRaw,'2026-11-29').prestigeAward=false;
@@ -88,4 +89,18 @@ test('refresh recomputes the rule without mutating cached inputs or retaining a 
 test('actual saved Paris March calendar matches the requested four-Sunday pattern',async()=>{
  const body=await unpackDocument(JSON.parse(await readFile(new URL('current-europe.json',import.meta.url)))),raw=readDocument(body,{carrier:'KE',origin:'ICN',region:'유럽'}),paris=raw.find(r=>r.origin==='ICN'&&r.destination==='CDG'&&r.month==='2027-03');
  const out=project(paris);assert.deepEqual(out.repeatMarkerPolicy.weekdays,[0]);assert.deepEqual(out.repeatMarkerPolicy.excludedDates,['2027-03-07','2027-03-14','2027-03-21','2027-03-28']);assert.equal(d(out,'2027-03-15').repeatMarkerExclusion,undefined);assert.equal(d(out,'2027-03-18').repeatMarkerExclusion,undefined);
+});
+
+test('actual Paris December keeps20and27 orange with saved positive badges while13 remains unknown',async()=>{
+ const body=await unpackDocument(JSON.parse(await readFile(new URL('fixtures/paris-v2-current-records.json',import.meta.url)))),raw=readDocument(body,{carrier:'KE',origin:'ICN',region:'유럽'}).find(r=>r.origin==='ICN'&&r.destination==='CDG'&&r.month==='2026-12'),before=structuredClone(raw),view=structuredClone(raw);
+ for(const day of view.dates)Object.assign(day,{status:'NO_FLIGHT',...flags(),operationStatus:'NO_FLIGHT',timetableConflict:true});
+ const out=limitDisplayRecords([project(raw,view)],catalog)[0],route=makeRoutes([out],catalog,'ICN')[0];assert.deepEqual(out.repeatMarkerPolicy.weekdays,[]);assert.equal(out.repeatMarkerPolicy.reviews.find(r=>r.weekday===0).matchedDates.length,2);
+ for(const date of ['2026-12-20','2026-12-27']){const info=cellInfo(route,'out',date,'KE');assert.equal(info.needsReview,true);assert.equal(info.kind,'available');assert.deepEqual(info.marks.map(mark=>mark.field),['prestigeAward','prestigeUpgrade']);assert.equal(hasMark(d(out,date),'KE'),true);}
+ const unknown=cellInfo(route,'out','2026-12-13','KE');assert.equal(unknown.needsReview,true);assert.equal(unknown.kind,'unknown');assert.deepEqual(unknown.marks,[]);assert.equal(hasMark(d(out,'2026-12-13'),'KE'),false);assert.deepEqual(raw,before);
+});
+test('actual Paris February excludes all four Sundays and never revives a codeshare or first badge',async()=>{
+ const body=await unpackDocument(JSON.parse(await readFile(new URL('fixtures/paris-v2-current-records.json',import.meta.url)))),raw=readDocument(body,{carrier:'KE',origin:'ICN',region:'유럽'}).find(r=>r.origin==='ICN'&&r.destination==='CDG'&&r.month==='2027-02'),view=structuredClone(raw);
+ for(const day of view.dates){day.firstCombined=true;day.flights=[{number:'KE5901',operatorCode:'AF',serviceKind:'CODESHARE',operationStatus:'OPERATING',awardDataStatus:'CAPTURED',...flags(['prestigeAward','prestigeUpgrade','firstCombined'])}];}
+ const out=limitDisplayRecords([project(raw,view)],catalog)[0],route=makeRoutes([out],catalog,'ICN')[0];assert.deepEqual(out.repeatMarkerPolicy.evidence.find(row=>row.weekday===0).dates,['2027-02-07','2027-02-14','2027-02-21','2027-02-28']);
+ for(const date of ['2027-02-07','2027-02-14','2027-02-21','2027-02-28']){const info=cellInfo(route,'out',date,'KE');assert.equal(info.kind,'unknown');assert.deepEqual(info.marks,[]);assert.equal(hasMark(d(out,date),'KE'),false);assert.equal(repeatMarkerCodeshareFlags(d(out,date)),null);}
 });
