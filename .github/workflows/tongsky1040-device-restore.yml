@@ -1,0 +1,55 @@
+name: TongSKY 1040 signed APK upgrade and launch
+on:
+  push:
+    branches: [recovery/tongsky-1040]
+    paths: ['.github/workflows/tongsky1040-device-restore.yml']
+permissions:
+  contents: read
+jobs:
+  device:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: bong40101-prog/tong-series
+          ref: afe361dcd7e67972fb2690bef5c85944859e4488
+          persist-credentials: false
+      - name: Prepare isolated device test
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          cat > "$RUNNER_TEMP/tong-device.sh" <<'SH'
+          set -euo pipefail
+          adb shell svc wifi disable
+          adb shell svc data disable
+          adb install TongSKY-1.0.39.apk
+          old=$(adb shell pm list packages -U kr.tong.sky | tr -d '\r')
+          adb install -r TongSKY-1.0.40.apk
+          new=$(adb shell pm list packages -U kr.tong.sky | tr -d '\r')
+          test -n "$old" && test "$old" = "$new"
+          adb shell dumpsys package kr.tong.sky | grep -F 'versionCode=10140' > version.txt
+          adb logcat -c
+          adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p kr.tong.sky | tee launch.txt
+          grep -q 'Status: ok' launch.txt
+          sleep 12
+          adb shell pidof kr.tong.sky
+          adb shell dumpsys activity activities | grep -E '(mResumedActivity|topResumedActivity|ResumedActivity).*kr.tong.sky' > activity.txt
+          adb logcat -d -b crash > crashes.txt
+          if grep -Eq 'Process: kr\.tong\.sky([:, ]|$)' crashes.txt; then exit 1; fi
+          echo '1.0.39 → 1.0.40 installed in place; UID unchanged, version 10140, launcher resumed, process survived 12s offline, no app crash record.' >> "$GITHUB_STEP_SUMMARY"
+          SH
+      - name: Upgrade signed release and launch on API 35
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          cores: 2
+          ram-size: 3072M
+          disable-animations: true
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash "$RUNNER_TEMP/tong-device.sh"
