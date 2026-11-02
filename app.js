@@ -1,10 +1,10 @@
-import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=143';
-import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute} from './model.js?v=143';
-import {collectRepeatHistory,mergeRepeatHistory,readRepeatHistory,writeRepeatHistory,serializeRepeatHistory} from './repeat-history.js?v=143';
-import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=143';
-import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=143';
-import {projectLegacySavedRecords} from './legacy.js?v=143';
-import {loadTimetableReference,projectTimetableRecords,timetableRouteSummary,lookupTimetableDay} from './timetable.js?v=143';
+import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=144';
+import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=144';
+import {collectRepeatHistory,mergeRepeatHistory,readRepeatHistory,writeRepeatHistory,serializeRepeatHistory} from './repeat-history.js?v=144';
+import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=144';
+import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=144';
+import {projectLegacySavedRecords} from './legacy.js?v=144';
+import {loadTimetableReference,projectTimetableRecords,timetableRouteSummary,lookupTimetableDay} from './timetable.js?v=144';
 const $=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const today=todayKST();
@@ -28,7 +28,7 @@ function setOptions(){
  $('seat').replaceChildren();const options=state.carrier==='OZ'?['비즈니스 전체','비즈니스 보너스','비즈니스 승급']:['프레스티지·퍼스트 전체','프레스티지 보너스','프레스티지 승급','퍼스트 보너스·승급 합산'];
  for(let i=0;i<options.length;i++){const option=node('option','',options[i]);option.value=i===0?'all':String(i-1);$('seat').append(option);}$('seat').value=state.seat;
  const regions=$('region');regions.replaceChildren(new Option('전체 대륙·지역','전체'));for(const region of REGIONS)if(catalogs[state.carrier].regions[region]?.length)regions.add(new Option(region,region));if(![...regions.options].some(o=>o.value===state.region)){state.region='전체';state.country='전체';state.airport='전체';}regions.value=state.region;setGeographyOptions();
- $('ke-nonoperation-notice').hidden=state.carrier!=='KE';$('repeat-history').hidden=state.carrier!=='KE';
+ $('ke-range-notice').hidden=state.carrier!=='KE';$('ke-nonoperation-notice').hidden=state.carrier!=='KE';$('repeat-history').hidden=state.carrier!=='KE';
  $('first-note').hidden=state.carrier==='OZ';$('seat-help').replaceChildren(node('strong','','보너스'),document.createTextNode(' = 마일리지로 발권 · '),node('strong','','승급'),document.createTextNode(' = 좌석 업그레이드'),node('br'),document.createTextNode(state.carrier==='KE'?'프레스티지 = 비즈니스석 · 퍼스트 = 일등석':'아시아나는 비즈니스석의 보너스·승급을 구분합니다.'));$('official-link').href=AIRLINES[state.carrier].source;
  const legend=$('legend');legend.replaceChildren();AIRLINES[state.carrier].labels.forEach((label,i)=>{const item=node('span','legend-item');item.append(node('i','marker mark-'+i),document.createTextNode(label));legend.append(item);});const unknown=node('span','legend-item');unknown.append(node('i','marker unknown-dot'),document.createTextNode('미확인'));legend.append(unknown);
 }
@@ -155,7 +155,7 @@ function openDay(date,info){
  flightDetails(info,markers);timetableDayDetails(date,info,markers);$('day-times').replaceChildren();if(info.record){$('day-times').append(node('p','',`항공사 기준 ${fullTime.format(new Date(info.record.sourceUpdatedAt))}`),node('p','',`실제 수집 ${fullTime.format(info.record.success)}`));}else $('day-times').append(node('p','','저장된 수집 시각 없음'));
  $('day-dialog').showModal();
 }
-function finishData(records,errors){const masked=applyOperationPolicy(records,operationPolicy,{forcePending:Boolean(operationWarning)});const projected=projectLegacySavedRecords(records,projectTimetableRecords(masked.records,timetableIndex),timetableIndex,{end:bookingEnd(),endForRecord:r=>isExtendedKeRoute(r,catalogs.KE)?bookingEnd():KE_DISPLAY_END});repeatRecords=projectRepeatedMarkerRecords(records,projected,catalogs.KE);saveRepeatDecisions();state.records=limitDisplayRecords(repeatRecords,catalogs.KE);state.routes=makeRoutes(state.records,catalogs[state.carrier],state.origin);state.loading=false;$('refresh').disabled=false;status(state.records.length?`저장 ${state.records.length}개 노선·월 연결됨`:'저장된 자료 없음',state.records.length?'ready':'');message([errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 새 자료 불러오기로 다시 확인할 수 있습니다.':'',operationWarning,timetableWarning,masked.warnings.length?'운항 대조 자료가 올바르지 않은 일부 저장 결과는 표시에서 제외했습니다.':''].filter(Boolean).join(' '));stats();renderRoutes();renderCalendar();}
+function finishData(records,errors){records=records.filter(r=>!isExcludedRecord(r,catalogs[state.carrier],state.origin));const masked=applyOperationPolicy(records,operationPolicy,{forcePending:Boolean(operationWarning)});const projected=projectLegacySavedRecords(records,projectTimetableRecords(masked.records,timetableIndex),timetableIndex,{end:bookingEnd(),endForRecord:r=>isExtendedKeRoute(r,catalogs.KE)?bookingEnd():KE_DISPLAY_END});repeatRecords=projectRepeatedMarkerRecords(records,projected,catalogs.KE);saveRepeatDecisions();state.records=limitDisplayRecords(repeatRecords,catalogs.KE);state.routes=makeRoutes(state.records,catalogs[state.carrier],state.origin);state.loading=false;$('refresh').disabled=false;status(state.records.length?`저장 ${state.records.length}개 노선·월 연결됨`:'저장된 자료 없음',state.records.length?'ready':'');message([errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 새 자료 불러오기로 다시 확인할 수 있습니다.':'',operationWarning,timetableWarning,masked.warnings.length?'운항 대조 자료가 올바르지 않은 일부 저장 결과는 표시에서 제외했습니다.':''].filter(Boolean).join(' '));stats();renderRoutes();renderCalendar();}
 async function loadData(force=false){
  const id=++generation;controller?.abort();controller=new AbortController();const own=controller,carrier=state.carrier,origin=state.origin,key=`${carrier}:${origin}`;state.loading=true;state.selected=null;state.records=[];state.routes=[];message('');status('저장 자료 불러오는 중');$('refresh').disabled=true;stats();renderRoutes();renderCalendar();
  const cached=cache.get(key);if(!force&&cached&&Date.now()-cached.at<60000){finishData(cached.records,cached.errors);return;}
