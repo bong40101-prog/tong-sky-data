@@ -1,5 +1,5 @@
 // Decision snapshots only. Airline observations and collection clocks are never rewritten.
-export const REPEAT_HISTORY_KEY = 'tongsky.repeat-marker-history.v1';
+export const REPEAT_HISTORY_KEY = 'tongsky.repeat-marker-history.v2';
 export const REPEAT_HISTORY_LIMIT = 2000;
 const MAX_BYTES = 3 * 1024 * 1024;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -64,6 +64,7 @@ export function readRepeatHistory(storage) {
   try {
     const target = storage ?? globalThis.localStorage;
     if (!target || typeof target.getItem !== 'function') return [];
+    if (typeof target.removeItem === 'function') target.removeItem('tongsky.repeat-marker-history.v1');
     const raw = target.getItem(REPEAT_HISTORY_KEY);
     if (typeof raw !== 'string' || raw.length > MAX_BYTES) return [];
     const document = JSON.parse(raw);
