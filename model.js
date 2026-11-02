@@ -1,6 +1,6 @@
 import {repeatMarkerCodeshareFlags,repeatMarkerReviewFlags,savedCalendarFlags,repeatedMarkerScope} from './repeat-markers.js?v=146';
 import {validateClaimedOperationSnapshot} from './operation.js?v=146';
-export const BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v102/';
+export const BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v103/';
 export const OZ_BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v101/';
 export const FIELDS=['prestigeAward','prestigeUpgrade','firstCombined'];
 export const ALL_FIELDS=['economyAward','premiumAward','prestigeAward','premiumUpgrade','prestigeUpgrade','firstCombined'];
