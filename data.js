@@ -24,8 +24,10 @@ export async function loadSavedDataset({catalogs,carriers,origin,signal,force=fa
  const sources=sourcesFor(catalogs,carriers);if(sources.some(s=>!/^[a-z_]+$/.test(s.id)))throw new Error('지역 경로 오류');
  const results=Object.fromEntries(carriers.map(c=>[c,{records:[],errors:[]}])),succeeded=new Set(),total=sources.length+(carriers.includes('OZ')?asianaLoadRegions(catalogs.OZ).length:0);let cursor=0,completed=0;
  const emit=(source,phase,extra={})=>onProgress({completed,total,source,phase,...extra});
+ // A unique read URL avoids replaying the CDN's pre-upload (possibly empty) document.
+ const requestVersion=Date.now();
  async function worker(){while(cursor<sources.length&&!signal?.aborted){const source=sources[cursor++],result=results[source.carrier];emit(source,'loading');
-  try{const response=await fetcher(`${source.carrier==='OZ'?OZ_BASE:BASE}${origin}/${source.id}.json`,{signal,cache:force?'reload':'default',credentials:'omit',referrerPolicy:'no-referrer'});
+  try{const response=await fetcher(`${source.carrier==='OZ'?OZ_BASE:BASE}${origin}/${source.id}.json?refresh=${requestVersion}`,{signal,cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
    let body=null;if(response.status!==404){if(!response.ok)throw new Error(`HTTP ${response.status}`);body=await unpackDocument(await readJSON(response,signal));if(signal?.aborted)throw signal.reason;}
    if(source.carrier==='OZ'){
     const groups=body?asianaGroups(body,catalogs.OZ,origin):asianaLoadRegions(catalogs.OZ).map(region=>({region,body:null})),staged=[];
