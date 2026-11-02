@@ -1,0 +1,69 @@
+name: TongSKY 1040 recovery audit
+on:
+  push:
+    branches: [recovery/tongsky-1040]
+    paths: ['.github/workflows/tongsky-1040-recovery-audit.yml', 'tools/recovery-audit.mjs']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: tong-sky-data
+          path: saved
+          persist-credentials: false
+          sparse-checkout: |
+            data/mobile/v102
+            data/mobile/v101
+      - uses: actions/checkout@v4
+        with:
+          repository: bong40101-prog/tong-series
+          ref: afe361dcd7e67972fb2690bef5c85944859e4488
+          path: series
+          persist-credentials: false
+      - name: Validate release and upgrade certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd series
+          echo 'e97e2e19954ebebe87790861819b5bb6f53c0a8571926b3a386b7364a0d08efe  TongSKY-1.0.40.apk' | sha256sum -c -
+          tool=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          for v in 39 40; do "$tool" verify --verbose --print-certs "TongSKY-1.0.$v.apk" > "$RUNNER_TEMP/sign$v"; grep 'certificate SHA-256 digest:' "$RUNNER_TEMP/sign$v"; done
+          diff <(grep 'certificate SHA-256 digest:' "$RUNNER_TEMP/sign39") <(grep 'certificate SHA-256 digest:' "$RUNNER_TEMP/sign40")
+          grep -q 'TongSKY-1.0.40.apk' index.html
+          node -e "const a=require('./downloads.json').find(a=>a.package==='kr.tong.sky');if(a.versionCode!==10140||a.file!=='TongSKY-1.0.40.apk')process.exit(1)"
+      - name: Audit original saved data, both directions and both carriers
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs'; import {execFileSync} from 'node:child_process'; import {unpackDocument} from './dist/model.js'; import {repeatedMarkerRule} from './dist/repeat-markers.js';
+          const cat=JSON.parse(fs.readFileSync('dist/catalog.json'));const out={dataCommit:execFileSync('git',['-C','saved','rev-parse','HEAD'],{encoding:'utf8'}).trim(),rows:[],totals:{},warnings:[]};
+          const fields=['economyAward','premiumAward','prestigeAward','premiumUpgrade','prestigeUpgrade','firstCombined'];
+          for(const carrier of ['KE','OZ']){const regions=cat[carrier].regions, wanted=['미주','유럽'];const city=new Map(wanted.flatMap(r=>regions[r].map(c=>[c.code,r])));const totals=out.totals[carrier]={routeMonths:0,observedDays:0,unknownDays:0,rawNoFlight:0,contradictoryNoFlight:0,excludedWeekdays:0,reviewWeekdays:0,outsideTripletRule:0,catalogDirections:0,directionsWithData:0};const rows=new Map();
+            const dir=carrier==='KE'?'saved/data/mobile/v102':'saved/data/mobile/v101';let docs=0;
+            for(const hub of fs.readdirSync(dir,{withFileTypes:true}).filter(f=>f.isDirectory()&&/^[A-Z]{3}$/.test(f.name)).map(f=>f.name)){
+              const files=carrier==='KE'?['americas.json','europe.json']:['asiana.json'];if(!files.some(x=>fs.existsSync(`${dir}/${hub}/${x}`)))continue;
+              for(const [a,region] of city){if(a===hub)continue;for(const [o,d] of [[hub,a],[a,hub]])rows.set(`${o}-${d}`,{carrier,region,origin:o,destination:d,months:[],excluded:0,review:0,rawNoFlight:0,unknown:0});}
+              for(const file of files){const p=`${dir}/${hub}/${file}`;if(!fs.existsSync(p)){out.warnings.push(`missing ${p}`);continue;}const doc=await unpackDocument(JSON.parse(fs.readFileSync(p)));if(doc.schema!==1||doc.origin!==hub||!doc.records)throw Error(`Bad doc ${p}`);docs++;
+                for(const [k,v] of Object.entries(doc.records)){const s=v.current;if(!s||!Array.isArray(s.dates))throw Error(`Bad snapshot: ${k}`);const r=rows.get(`${s.origin}-${s.destination}`);if(!r)continue;if(k!==`${s.origin}-${s.destination}-${s.month}`||(s.carrier??'KE')!==carrier)throw Error(`Identity mismatch: ${k}`);if(r.months.includes(s.month))throw Error(`Duplicate ${carrier}:${k}`);r.months.push(s.month);totals.routeMonths++;
+                  const rule=repeatedMarkerRule({...s,carrier},cat[carrier]);if(rule){r.excluded+=rule.evidence.length;r.review+=rule.reviews.length;totals.excludedWeekdays+=rule.evidence.length;totals.reviewWeekdays+=rule.reviews.length;}else totals.outsideTripletRule++;
+                  for(const day of s.dates){const src=day.awardCalendarFlags??day.legacyAwardFlags??day;const status=src.status??day.status;if(status==='NO_FLIGHT'){r.rawNoFlight++;totals.rawNoFlight++;if(fields.some(f=>src[f]===true))totals.contradictoryNoFlight++;}else if(status==='OBSERVED')totals.observedDays++;else{r.unknown++;totals.unknownDays++;}}
+                }
+              }
+            } if(!docs||!totals.routeMonths)throw Error(`No saved records: ${carrier}`);
+            totals.catalogDirections=rows.size;totals.directionsWithData=[...rows.values()].filter(r=>r.months.length).length;out.rows.push(...rows.values());
+          }
+          fs.writeFileSync('recovery-audit.json',JSON.stringify(out,null,2));console.log(JSON.stringify({dataCommit:out.dataCommit,totals:out.totals,warnings:out.warnings}));fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'Saved data only; not airline live availability.\n```json\n'+JSON.stringify(out.totals,null,2)+'\n```\n');
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tongsky-1040-all-route-audit
+          path: recovery-audit.json
+          if-no-files-found: error
+          retention-days: 7
