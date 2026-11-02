@@ -15,33 +15,33 @@ jobs:
           repository: bong40101-prog/tong-series
           ref: afe361dcd7e67972fb2690bef5c85944859e4488
           persist-credentials: false
-      - name: Prepare isolated device test
+      - name: Prepare device test
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
           cat > "$RUNNER_TEMP/tong-device.sh" <<'SH'
-          set -euo pipefail
+          set -euxo pipefail
           adb shell svc wifi disable
           adb shell svc data disable
           adb install TongSKY-1.0.39.apk
-          old=$(adb shell pm list packages -U kr.tong.sky | tr -d '\r')
-          adb install -r TongSKY-1.0.40.apk
-          new=$(adb shell pm list packages -U kr.tong.sky | tr -d '\r')
-          test -n "$old" && test "$old" = "$new"
-          adb shell dumpsys package kr.tong.sky | grep -F 'versionCode=10140' > version.txt
+          uid(){ adb shell pm list packages -U kr.tong.sky | tr -d '\r'; }
+          prev=$(uid); adb install -r TongSKY-1.0.40.apk; test -n "$prev"; test "$prev" = "$(uid)"
+          adb shell dumpsys package kr.tong.sky > pkg.txt
+          grep -F versionCode=10140 pkg.txt
+          adb shell cmd package query-activities --brief --query-flags 32 --user 0 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p kr.tong.sky | tee launcher.txt
+          grep -F 'kr.tong.sky/' launcher.txt
           adb logcat -c
-          adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p kr.tong.sky | tee launch.txt
-          grep -q 'Status: ok' launch.txt
+          adb shell wm dismiss-keyguard
+          adb shell am start -W --user 0 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n kr.tong.sky/.MainActivity | tee launch.txt
+          grep 'Status: ok' launch.txt
           sleep 12
-          adb shell pidof kr.tong.sky
-          adb shell dumpsys activity activities | grep -E '(mResumedActivity|topResumedActivity|ResumedActivity).*kr.tong.sky' > activity.txt
           adb logcat -d -b crash > crashes.txt
-          if grep -Eq 'Process: kr\.tong\.sky([:, ]|$)' crashes.txt; then exit 1; fi
-          echo '1.0.39 → 1.0.40 installed in place; UID unchanged, version 10140, launcher resumed, process survived 12s offline, no app crash record.' >> "$GITHUB_STEP_SUMMARY"
+          if grep -Eq 'Process: kr\.tong\.sky([:, ]|$)' crashes.txt; then cat crashes.txt; exit 1; fi
+          adb shell pidof kr.tong.sky
+          adb shell dumpsys activity activities > acts.txt
+          grep -Ei '(resumedactivity|topresumed|resumed:).*kr\.tong\.sky' acts.txt
           SH
-      - name: Upgrade signed release and launch on API 35
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+      - uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35
           target: google_apis
@@ -53,3 +53,15 @@ jobs:
           emulator-boot-timeout: 300
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: bash "$RUNNER_TEMP/tong-device.sh"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: signed-apk-device-trace
+          path: |
+            pkg.txt
+            launcher.txt
+            launch.txt
+            crashes.txt
+            acts.txt
+          if-no-files-found: warn
+          retention-days: 5
