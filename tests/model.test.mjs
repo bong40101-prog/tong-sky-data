@@ -42,3 +42,4 @@ test('seat filtering changes matching dates without hiding the other category co
  const route=countRoute([day('2026-11-02','OBSERVED',{prestigeAward:true}),day('2026-11-03','OBSERVED',{prestigeUpgrade:true,firstCombined:true})]);
  const summary=summarize(route,{...range,seat:'0'});assert.equal(summary.marked,1);assert.deepEqual(summary.byType,{prestigeAward:1,prestigeUpgrade:1,firstCombined:1});
 });
+

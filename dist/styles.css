@@ -89,3 +89,21 @@ body[data-carrier="OZ"] .month-type-counts{grid-template-columns:repeat(2,minmax
 
 .flight-group{margin-top:22px}.flight-group h3{font-size:13px;margin:0 0 8px;color:#536b7e}.flight-detail{display:flex;flex-direction:column;gap:6px;padding:13px 0;border-bottom:1px solid #e7edf2}.flight-heading{font-size:13px;font-weight:650}.flight-operator,.flight-operation,.flight-empty{font-size:11px;color:#8091a0}.flight-awards{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px}.flight-award{font-size:10px;border-radius:5px;padding:4px 7px;background:#eaf3f8;color:#366e91}
 .timetable-summary{margin:15px 0;padding:12px 14px;border:1px solid #e3eaf0;border-radius:8px;background:#f8fafc;color:#536b7e;font-size:11px;line-height:1.7}.timetable-summary strong{font-size:12px;color:#365a77}.timetable-summary p{margin:5px 0 0}.timetable-caption{font-size:10px;color:#7c8e9d;line-height:1.65}.timetable-day-reference{border-top:1px solid #e7edf2;margin-top:20px;padding-top:12px;font-size:11px;color:#536b7e;line-height:1.7}.timetable-day-reference h3{font-size:13px;margin:0 0 10px}.timetable-day-reference p{margin:7px 0}
+
+
+/* Monthly repeated-marker review is also labelled in text, not color alone. */
+.day.day-review{background:#fff3d8;border:2px solid #b86200;box-shadow:inset 0 0 0 1px #fff3d8}
+.day.day-review:hover,.day.day-review:focus-visible{background:#ffe6b6;border-color:#884500}
+.day-review-tag{display:block;color:#7b3c00;background:#ffdc9b;padding:2px 4px;border-radius:4px;font-size:10px;font-weight:800;line-height:1.4}
+.repeat-review-title,.repeat-review-copy{color:#854000!important}
+.repeat-review-detail{padding:14px;border:1px solid #b86200;border-radius:10px;background:#fff3d8;color:#713800;line-height:1.7}
+.repeat-history{margin:24px 0;border:1px solid #d5e0e8;border-radius:16px;background:#fff;overflow:hidden}
+.repeat-history summary{padding:18px 22px;cursor:pointer;font-weight:800;color:#163a5f}
+.repeat-history summary span{margin-left:8px;color:#687e8d;font-size:13px}
+.repeat-history-content{padding:0 22px 22px;font-size:13px;line-height:1.7}
+.repeat-history-content p{color:#526a7c}.repeat-audit-link{display:inline-block;margin:0 0 14px;color:#195b89}
+.repeat-history-scroll{overflow:auto;max-height:460px}.repeat-history table{border-collapse:collapse;min-width:770px;width:100%;text-align:left;font-size:12px}
+.repeat-history th,.repeat-history td{padding:10px 12px;border-bottom:1px solid #dbe2e8;vertical-align:top}
+.repeat-history th{position:sticky;top:0;background:#edf3f8;color:#163a5f;white-space:nowrap}.repeat-history td:nth-child(-n+5){white-space:nowrap}
+.repeat-review-row{background:#fff3d8;color:#713800}.repeat-excluded-row{background:#f2f5f7;color:#4b6373}
+@media(max-width:600px){.repeat-history-content{padding:0 12px 16px}.repeat-history summary{padding:16px 12px}.day-review-tag{font-size:9px;padding:1px 2px}}
