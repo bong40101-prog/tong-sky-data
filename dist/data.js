@@ -1,4 +1,4 @@
-import {BASE,REGIONS,readDocument,unpackDocument} from './model.js?v=137-weekdays';
+import {BASE,OZ_BASE,REGIONS,readDocument,unpackDocument} from './model.js?v=138';
 export function sourcesFor(catalogs,carriers){
  return carriers.flatMap(carrier=>carrier==='OZ'?[{carrier,id:'asiana',region:'아시아나'}]:REGIONS.filter(region=>catalogs.KE.ids[region]).map(region=>({carrier,id:catalogs.KE.ids[region],region})));
 }
@@ -16,7 +16,7 @@ export async function loadSavedDataset({catalogs,carriers,origin,signal,force=fa
  const sources=sourcesFor(catalogs,carriers);if(sources.some(s=>!/^[a-z_]+$/.test(s.id)))throw new Error('지역 경로 오류');
  const results=Object.fromEntries(carriers.map(c=>[c,{records:[],errors:[]}])),succeeded=new Set();let cursor=0,completed=0;
  async function worker(){while(cursor<sources.length&&!signal?.aborted){const source=sources[cursor++],result=results[source.carrier];onProgress({completed,total:sources.length,source,phase:'loading'});
-  try{const response=await fetcher(`${BASE}${origin}/${source.id}.json`,{signal,cache:force?'reload':'default',credentials:'omit',referrerPolicy:'no-referrer'});
+  try{const response=await fetcher(`${source.carrier==='OZ'?OZ_BASE:BASE}${origin}/${source.id}.json`,{signal,cache:force?'reload':'default',credentials:'omit',referrerPolicy:'no-referrer'});
    if(response.status!==404){if(!response.ok)throw new Error(`HTTP ${response.status}`);const body=await unpackDocument(await readJSON(response,signal));if(signal?.aborted)throw signal.reason;result.records.push(...readDocument(body,{carrier:source.carrier,origin,region:source.region,now}).map(record=>({...record,sourceRegion:source.region})));}
    succeeded.add(source.carrier+':'+source.id);completed++;onProgress({completed,total:sources.length,source,phase:'done'});
   }catch(error){result.errors.push(source.region);onProgress({completed,total:sources.length,source,phase:'error'});}

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updatedAt": "2026-11-02T04:06:31.077Z",
+  "updatedAt": "2026-11-02T05:04:15.541Z",
   "weeks": [
     {
       "schema": 1,
@@ -301,6 +301,189 @@
           "flights": [
             {
               "number": "KE945"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": 2,
+      "completeOperators": true,
+      "carrier": "KE",
+      "origin": "ICN",
+      "destination": "CDG",
+      "queriedDate": "2027-02-21",
+      "weekStart": "2027-02-15",
+      "observedAt": "2026-11-02T05:04:15.541Z",
+      "sourceUrl": "https://www.koreanair.com/flight-status?departure=ICN&arrival=CDG&departureDate=20270221&arrivalDate=20270221&isSchedule=T",
+      "ownFlightRows": 1,
+      "partnerFlightRows": 1,
+      "dates": [
+        {
+          "date": "2027-02-15",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE901",
+              "operatorCode": "KE",
+              "operatorName": "대한항공",
+              "serviceKind": "DIRECT",
+              "departureTime": "12:05",
+              "arrivalTime": "18:35",
+              "status": "OPERATING"
+            },
+            {
+              "number": "KE5901",
+              "operatorCode": "AF",
+              "operatorName": "에어프랑스",
+              "serviceKind": "CODESHARE",
+              "departureTime": "13:20",
+              "arrivalTime": "19:45",
+              "status": "OPERATING"
+            }
+          ]
+        },
+        {
+          "date": "2027-02-16",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE901",
+              "operatorCode": "KE",
+              "operatorName": "대한항공",
+              "serviceKind": "DIRECT",
+              "departureTime": "12:05",
+              "arrivalTime": "18:35",
+              "status": "OPERATING"
+            },
+            {
+              "number": "KE5901",
+              "operatorCode": "AF",
+              "operatorName": "에어프랑스",
+              "serviceKind": "CODESHARE",
+              "departureTime": "13:20",
+              "arrivalTime": "19:45",
+              "status": "OPERATING"
+            }
+          ]
+        },
+        {
+          "date": "2027-02-17",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE901",
+              "operatorCode": "KE",
+              "operatorName": "대한항공",
+              "serviceKind": "DIRECT",
+              "departureTime": "12:05",
+              "arrivalTime": "18:35",
+              "status": "OPERATING"
+            },
+            {
+              "number": "KE5901",
+              "operatorCode": "AF",
+              "operatorName": "에어프랑스",
+              "serviceKind": "CODESHARE",
+              "departureTime": "13:20",
+              "arrivalTime": "19:45",
+              "status": "OPERATING"
+            }
+          ]
+        },
+        {
+          "date": "2027-02-18",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE901",
+              "operatorCode": "KE",
+              "operatorName": "대한항공",
+              "serviceKind": "DIRECT",
+              "departureTime": "12:05",
+              "arrivalTime": "18:35",
+              "status": "OPERATING"
+            },
+            {
+              "number": "KE5901",
+              "operatorCode": "AF",
+              "operatorName": "에어프랑스",
+              "serviceKind": "CODESHARE",
+              "departureTime": "13:20",
+              "arrivalTime": "19:45",
+              "status": "OPERATING"
+            }
+          ]
+        },
+        {
+          "date": "2027-02-19",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE901",
+              "operatorCode": "KE",
+              "operatorName": "대한항공",
+              "serviceKind": "DIRECT",
+              "departureTime": "12:05",
+              "arrivalTime": "18:35",
+              "status": "OPERATING"
+            },
+            {
+              "number": "KE5901",
+              "operatorCode": "AF",
+              "operatorName": "에어프랑스",
+              "serviceKind": "CODESHARE",
+              "departureTime": "13:20",
+              "arrivalTime": "19:45",
+              "status": "OPERATING"
+            }
+          ]
+        },
+        {
+          "date": "2027-02-20",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE901",
+              "operatorCode": "KE",
+              "operatorName": "대한항공",
+              "serviceKind": "DIRECT",
+              "departureTime": "12:05",
+              "arrivalTime": "18:35",
+              "status": "OPERATING"
+            },
+            {
+              "number": "KE5901",
+              "operatorCode": "AF",
+              "operatorName": "에어프랑스",
+              "serviceKind": "CODESHARE",
+              "departureTime": "13:20",
+              "arrivalTime": "19:45",
+              "status": "OPERATING"
+            }
+          ]
+        },
+        {
+          "date": "2027-02-21",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE901",
+              "operatorCode": "KE",
+              "operatorName": "대한항공",
+              "serviceKind": "DIRECT",
+              "departureTime": "12:05",
+              "arrivalTime": "18:35",
+              "status": "NO_FLIGHT"
+            },
+            {
+              "number": "KE5901",
+              "operatorCode": "AF",
+              "operatorName": "에어프랑스",
+              "serviceKind": "CODESHARE",
+              "departureTime": "13:20",
+              "arrivalTime": "19:45",
+              "status": "OPERATING"
             }
           ]
         }
