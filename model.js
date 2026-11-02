@@ -1,4 +1,4 @@
-import {validateClaimedOperationSnapshot} from './operation.js?v=140';
+import {validateClaimedOperationSnapshot} from './operation.js?v=141';
 export const BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v102/';
 export const OZ_BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v101/';
 export const FIELDS=['prestigeAward','prestigeUpgrade','firstCombined'];
@@ -17,7 +17,8 @@ export function daysInMonth(month){return new Date(Date.UTC(Number(month.slice(0
 export function validDate(value){return /^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;}
 export function validMonth(value){return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);}
 export function selectedFields(carrier,seat='all'){const count=carrier==='OZ'?2:3;return FIELDS.slice(0,count).filter((field,i)=>seat==='all'||seat===String(i));}
-export function hasMark(day,carrier,seat='all'){return (carrier!=='KE'||day?.date<=KE_DISPLAY_END)&&day?.status==='OBSERVED'&&selectedFields(carrier,seat).some(field=>day[field]===true);}
+export function savedAggregateFlags(day){const s=day?.savedAggregate;return day?.status==='UNKNOWN'&&day.operationStatus!=='NO_FLIGHT'&&!day.timetableConflict&&day.flightDetailStatus===undefined&&!day.flights?.some(f=>f.operationStatus==='NO_FLIGHT'||f.operationStatus==='UNKNOWN')&&day.date<=KE_DISPLAY_END&&s?.status==='OBSERVED'&&s.sourceKind==='SAVED_CALENDAR_AGGREGATE'&&ALL_FIELDS.every(f=>typeof s[f]==='boolean')?s:null;}
+export function hasMark(day,carrier,seat='all'){const source=day?.status==='OBSERVED'?day:carrier==='KE'?savedAggregateFlags(day):null;return (carrier!=='KE'||day?.date<=KE_DISPLAY_END)&&!!source&&selectedFields(carrier,seat).some(field=>source[field]===true);}
 const timestamp=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value));
 export async function unpackDocument(input,{maxBytes=32*1024*1024}={}){
  if(!input||typeof input!=='object')throw new DataError('저장 자료 형식을 확인하지 못했습니다.');
@@ -59,23 +60,26 @@ export function makeRoutes(records,catalog,origin){
 export function summarize(route,{carrier,seat='all',start,end,month:chosenMonth,direction}){
  if(carrier==='KE'&&end>KE_DISPLAY_END)end=KE_DISPLAY_END;
  const fields=selectedFields(carrier),byType=Object.fromEntries(fields.map(field=>[field,0]));
- let marked=0,observed=0,noFlight=0,months=0,latest=0,nearest=null;
+ let marked=0,observed=0,savedAggregateDays=0,noFlight=0,months=0,latest=0,nearest=null;
  for(const [legName,leg] of Object.entries(route.legs))for(const [month,record] of leg){
   if(direction&&legName!==direction||chosenMonth&&month!==chosenMonth)continue;
   if(month<start.slice(0,7)||month>end.slice(0,7))continue;
   months++;latest=Math.max(latest,record.success);
   for(const day of record.dates)if(day.date>=start&&day.date<=end){
-   if(day.status==='OBSERVED'){observed++;for(const field of fields)if(day[field]===true)byType[field]++;}else if(day.status==='NO_FLIGHT')noFlight++;
+   const saved=carrier==='KE'?savedAggregateFlags(day):null,source=day.status==='OBSERVED'?day:saved;if(source){if(day.status==='OBSERVED')observed++;else savedAggregateDays++;for(const field of fields)if(source[field]===true)byType[field]++;}else if(day.status==='NO_FLIGHT')noFlight++;
    if(hasMark(day,carrier,seat)){marked++;if(nearest===null||day.date<nearest)nearest=day.date;}
   }
  }
- return {marked,observed,noFlight,months,latest,nearest,byType};
+ return {marked,observed,savedAggregateDays,noFlight,months,latest,nearest,byType};
 }
 export function filterRoutes(routes,filter){
  const q=(filter.query??'').trim().toLocaleLowerCase();return routes.filter(route=>(filter.region==='전체'||route.region===filter.region)&&(!filter.country||filter.country==='전체'||route.countryCode===filter.country)&&(!filter.airport||filter.airport==='전체'||route.code===filter.airport)&&(!q||`${route.code} ${route.name}`.toLocaleLowerCase().includes(q))).map(route=>({...route,summary:summarize(route,filter)})).filter(route=>route.summary.months>0&&(!filter.onlyMarked||route.summary.marked>0)).sort((a,b)=>(a.summary.nearest??'9999').localeCompare(b.summary.nearest??'9999')||b.summary.marked-a.summary.marked||a.name.localeCompare(b.name,'ko'));
 }
 export function cellInfo(route,direction,date,carrier,seat='all'){
  if(carrier==='KE'&&date>KE_DISPLAY_END)return {kind:'outside',label:'대한항공 임시 조회 범위 밖',marks:[]};
+ const sourceRecord=route?.legs[direction]?.get(date.slice(0,7)),sourceDay=sourceRecord?.dates.find(x=>x.date===date),saved=carrier==='KE'?savedAggregateFlags(sourceDay):null;
+ if(saved){const marks=FIELDS.map((field,index)=>({field,index,label:AIRLINES.KE.labels[index]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&saved[m.field]);return {kind:marks.length?'available':'empty',label:'저장 표식 · 편별 운항 미대조'+(marks.length?' · '+marks.map(m=>m.label+' 저장').join(', '):' · 저장 표식 없음'),day:sourceDay,record:sourceRecord,marks,savedAggregate:true,flags:saved};}
+ if(sourceDay?.savedAggregatePendingReason)return {kind:'unknown',label:sourceDay.savedAggregatePendingReason,day:sourceDay,record:sourceRecord,marks:[]};
  const record=route?.legs[direction]?.get(date.slice(0,7));const day=record?.dates.find(x=>x.date===date);if(day?.timetableConflict&&day.status==='UNKNOWN')return {kind:'unknown',label:'운항 일정 불일치 · 표식 제외',day,record,marks:[]};if(day?.routeWeekdayExcluded)return {kind:'unknown',label:'비운항 · 지정 요일 기준',day,record,marks:[]};if(!day||day.status==='UNKNOWN')return {kind:'unknown',label:day?.legacyAwardFlags?'항공편별 재조회 필요':day?.operationPending?'항공편 운항 대조 전':'미조회·미확인',day,record,marks:[]};
  if(day.status==='NO_FLIGHT')return {kind:'noflight',label:day.operationSource==='KE_WEEKLY_SCHEDULE_ALL_OPERATORS'?'전체 운항편 없음 · 항공편별 스케줄 대조':'운항편 없음 · 저장 자료 기준',day,record,marks:[]};
  const marks=FIELDS.slice(0,carrier==='OZ'?2:3).map((field,i)=>({field,index:i,label:AIRLINES[carrier].labels[i]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&day[m.field]===true);
