@@ -74,7 +74,7 @@ export function readRepeatHistory(storage) {
 }
 
 export function serializeRepeatHistory(events) {
-  return JSON.stringify({ schema: 1, scope: 'browser-local', notice: '이 브라우저에서 확인한 비운항 추정·확인필요 판정 기록입니다. 시각은 원본 수집 기준이며 공동운항편은 판정 대상에서 제외됩니다.', events: mergeRepeatHistory([], events) }, null, 2);
+  return JSON.stringify({ schema: 1, scope: 'browser-local', notice: '이 브라우저에서 확인한 비운항 추정·확인필요 판정 기록입니다. 시각은 원본 수집 기준이며, 원본 달력의 세 표식 반복만 판정에 사용합니다. 공동운항 스케줄은 별도로 대조하지 않습니다.', events: mergeRepeatHistory([], events) }, null, 2);
 }
 
 export function writeRepeatHistory(events, storage) {

@@ -1,5 +1,5 @@
-import {repeatMarkerCodeshareFlags,repeatedMarkerScope} from './repeat-markers.js?v=144';
-import {validateClaimedOperationSnapshot} from './operation.js?v=144';
+import {repeatMarkerCodeshareFlags,repeatMarkerReviewFlags,savedCalendarFlags,repeatedMarkerScope} from './repeat-markers.js?v=146';
+import {validateClaimedOperationSnapshot} from './operation.js?v=146';
 export const BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v102/';
 export const OZ_BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v101/';
 export const FIELDS=['prestigeAward','prestigeUpgrade','firstCombined'];
@@ -22,7 +22,7 @@ export function validDate(value){return /^\d{4}-\d{2}-\d{2}$/.test(value)&&Numbe
 export function validMonth(value){return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);}
 export function selectedFields(carrier,seat='all'){const count=carrier==='OZ'?2:3;return FIELDS.slice(0,count).filter((field,i)=>seat==='all'||seat===String(i));}
 export function savedAggregateFlags(day){const s=day?.savedAggregate;return !day?.repeatMarkerExclusion&&day?.status==='UNKNOWN'&&day.operationStatus!=='NO_FLIGHT'&&!day.timetableConflict&&day.flightDetailStatus===undefined&&!day.flights?.some(f=>f.operationStatus==='NO_FLIGHT'||f.operationStatus==='UNKNOWN')&&(day.date<=KE_DISPLAY_END||day.keFutureVisible===true)&&s?.status==='OBSERVED'&&s.sourceKind==='SAVED_CALENDAR_AGGREGATE'&&ALL_FIELDS.every(f=>typeof s[f]==='boolean')?s:null;}
-export function hasMark(day,carrier,seat='all'){const source=day?.repeatMarkerExclusion?repeatMarkerCodeshareFlags(day):day?.status==='OBSERVED'?day:carrier==='KE'?savedAggregateFlags(day):null;return (carrier!=='KE'||day?.date<=KE_DISPLAY_END||day?.keFutureVisible===true)&&!!source&&selectedFields(carrier,seat).some(field=>source[field]===true);}
+export function hasMark(day,carrier,seat='all'){const source=day?.repeatMarkerExclusion?repeatMarkerCodeshareFlags(day):day?.savedCalendar?savedCalendarFlags(day):repeatMarkerReviewFlags(day)??(day?.status==='OBSERVED'?day:carrier==='KE'?savedAggregateFlags(day):null);return (carrier!=='KE'||day?.date<=KE_DISPLAY_END||day?.keFutureVisible===true)&&!!source&&selectedFields(carrier,seat).some(field=>source[field]===true);}
 const timestamp=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value));
 export async function unpackDocument(input,{maxBytes=32*1024*1024}={}){
  if(!input||typeof input!=='object')throw new DataError('저장 자료 형식을 확인하지 못했습니다.');
@@ -70,7 +70,7 @@ export function summarize(route,{carrier,seat='all',start,end,month:chosenMonth,
   if(month<start.slice(0,7)||month>end.slice(0,7))continue;
   months++;latest=Math.max(latest,record.success);
   for(const day of record.dates)if(day.date>=start&&day.date<=end){
-   const saved=carrier==='KE'?savedAggregateFlags(day):null,source=day.repeatMarkerExclusion?repeatMarkerCodeshareFlags(day):day.status==='OBSERVED'?day:saved;if(source){if(day.status==='OBSERVED'||day.repeatMarkerExclusion)observed++;else savedAggregateDays++;for(const field of fields)if(source[field]===true)byType[field]++;}else if(day.status==='NO_FLIGHT')noFlight++;
+   const saved=carrier==='KE'?savedAggregateFlags(day):null,source=day.repeatMarkerExclusion?repeatMarkerCodeshareFlags(day):day.savedCalendar?savedCalendarFlags(day):repeatMarkerReviewFlags(day)??(day.status==='OBSERVED'?day:saved);if(source){if(day.status==='OBSERVED'||day.repeatMarkerExclusion)observed++;else savedAggregateDays++;for(const field of fields)if(source[field]===true)byType[field]++;}else if(day.savedCalendar?.status==='NO_FLIGHT'||!day.savedCalendar&&day.status==='NO_FLIGHT')noFlight++;
    if(hasMark(day,carrier,seat)){marked++;if(nearest===null||day.date<nearest)nearest=day.date;}
   }
  }
@@ -82,10 +82,9 @@ export function filterRoutes(routes,filter){
 function baseCellInfo(route,direction,date,carrier,seat='all'){
  if(carrier==='KE'&&!isExtendedKeRoute(route)&&date>KE_DISPLAY_END)return {kind:'outside',label:'대한항공 해당 지역의 임시 조회 범위 밖',marks:[]};
  const sourceRecord=route?.legs[direction]?.get(date.slice(0,7)),sourceDay=sourceRecord?.dates.find(x=>x.date===date),saved=carrier==='KE'?savedAggregateFlags(sourceDay):null;
- if(sourceDay?.repeatMarkerExclusion&&sourceDay.status!=='NO_FLIGHT'){
-  const flags=repeatMarkerCodeshareFlags(sourceDay),marks=flags?FIELDS.map((field,index)=>({field,index,label:AIRLINES.KE.labels[index]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&flags[m.field]):[];
-  return {kind:flags?(marks.length?'available':'empty'):'unknown',label:'대한항공 비운항 추정 · 해당 월 동일 요일 전체 세 표식'+(flags?' · 공동운항편 별도 표시':''),day:sourceDay,record:sourceRecord,marks,flags,repeatMarkerExclusion:sourceDay.repeatMarkerExclusion};
- }
+ if(sourceDay?.repeatMarkerExclusion)return {kind:'unknown',label:'비운항 추정 · 해당 월 동일 요일 전체 세 표식 · 날짜 표식 제외',day:sourceDay,record:sourceRecord,marks:[],repeatMarkerExclusion:sourceDay.repeatMarkerExclusion};
+ if(sourceDay?.savedCalendar){const source=sourceDay.savedCalendar;if(source.status==='UNKNOWN')return {kind:'unknown',label:'미조회·미확인 · 원본 저장 달력 기준',day:sourceDay,record:sourceRecord,marks:[]};if(source.status==='NO_FLIGHT')return {kind:'noflight',label:'비운항 · 원본 저장 달력 기준',day:sourceDay,record:sourceRecord,marks:[]};const flags=savedCalendarFlags(sourceDay),marks=flags?FIELDS.map((field,index)=>({field,index,label:AIRLINES.KE.labels[index]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&flags[m.field]):[];return {kind:marks.length?'available':'empty',label:'원본 저장 표식'+(marks.length?' · '+marks.map(m=>m.label).join(', '):' · 선택 등급의 표식 없음'),day:sourceDay,record:sourceRecord,marks,savedAggregate:true,flags};}
+ const reviewFlags=repeatMarkerReviewFlags(sourceDay);if(reviewFlags){const marks=FIELDS.map((field,index)=>({field,index,label:AIRLINES.KE.labels[index]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&reviewFlags[m.field]);return {kind:marks.length?'available':'empty',label:'확인필요 · 저장 표식 유지'+(marks.length?' · '+marks.map(m=>m.label).join(', '):' · 선택 등급의 저장 표식 없음'),day:sourceDay,record:sourceRecord,marks,savedAggregate:true,flags:reviewFlags};}
  if(saved){const marks=FIELDS.map((field,index)=>({field,index,label:AIRLINES.KE.labels[index]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&saved[m.field]);return {kind:marks.length?'available':'empty',label:'저장 표식 · 편별 운항 미대조'+(marks.length?' · '+marks.map(m=>m.label+' 저장').join(', '):' · 저장 표식 없음'),day:sourceDay,record:sourceRecord,marks,savedAggregate:true,flags:saved};}
  if(sourceDay?.savedAggregatePendingReason)return {kind:'unknown',label:sourceDay.savedAggregatePendingReason,day:sourceDay,record:sourceRecord,marks:[]};
  const record=route?.legs[direction]?.get(date.slice(0,7));const day=record?.dates.find(x=>x.date===date);if(day?.timetableConflict&&day.status==='UNKNOWN')return {kind:'unknown',label:'운항 일정 불일치 · 표식 제외',day,record,marks:[]};if(day?.routeWeekdayExcluded)return {kind:'unknown',label:'비운항 · 지정 요일 기준',day,record,marks:[]};if(!day||day.status==='UNKNOWN')return {kind:'unknown',label:day?.legacyAwardFlags?'항공편별 재조회 필요':day?.operationPending?'항공편 운항 대조 전':'미조회·미확인',day,record,marks:[]};
