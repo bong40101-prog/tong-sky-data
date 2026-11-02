@@ -71,11 +71,10 @@ function deriveDay(record,day,evidence,{now,forcePending,viewRules}){
  const legacy=raw.status==='LEGACY';if(!legacy)base.awardCalendarFlags=day.awardCalendarFlags??{status:day.status,...flags(day)};if(legacy){base.legacyAwardFlags=day.legacyAwardFlags??{status:day.status,...flags(day)};base.operationRequiresRequery=true;}
  const unmatched=rows.some(r=>r.operationStatus==='UNKNOWN'),unknownAward=raw.status==='UNKNOWN'||legacy,partial=!known||unmatched||unknownAward||rows.some(r=>r.operationStatus==='OPERATING'&&r.awardDataStatus==='UNKNOWN');
  const allOff=known&&!unmatched&&!unknownAward&&rows.length>0&&rows.every(f=>f.operationStatus==='NO_FLIGHT');
- const isFra=record.origin==='ICN'&&record.destination==='FRA'||record.origin==='FRA'&&record.destination==='ICN',allowed=[0,3,5].includes(new Date(day.date+'T00:00:00Z').getUTCDay());
- if(viewRules)for(const row of rows){if(isFra&&!allowed&&row.serviceKind==='DIRECT'){row.weekdayExcluded=true;row.weekdaySource='USER_SELECTED';for(const f of FIELDS)row[f]=false;}if(forcePending){row.viewPending=true;for(const f of FIELDS)row[f]=false;}}
+ if(viewRules)for(const row of rows){if(forcePending){row.viewPending=true;for(const f of FIELDS)row[f]=false;}}
  const combined=aggregate(rows),positive=any(combined),operationSummary=allOff?'NO_FLIGHT':summary(rows),status=allOff?'NO_FLIGHT':positive||known&&!partial&&rows.some(r=>r.operationStatus==='OPERATING')&&!forcePending?'OBSERVED':'UNKNOWN';
  Object.assign(base,combined,{status,flightObservations:raw.rows.map(r=>({...r})),flights:rows,operationSummary,operationPartial:partial,operationPending:status==='UNKNOWN',operationSchema:2,operationSource:SOURCE,operationCompleteOperators:known,operationStatus:allOff?'NO_FLIGHT':known&&rows.some(r=>r.operationStatus==='OPERATING')?'OPERATING':'UNKNOWN'});
- if(viewRules&&rows.some(r=>r.weekdayExcluded)&&!rows.some(r=>r.operationStatus==='OPERATING'&&!r.weekdayExcluded))base.routeWeekdayExcluded=true;if(partial||unknownAward)base.operationRequiresRequery=true;else delete base.operationRequiresRequery;if(known)base.operationObservedAt=evidence.week.observedAt;if(isFra&&viewRules)base.routeWeekdayRule={source:'USER_SELECTED',weekdays:[0,3,5],appliesTo:'DIRECT'};
+ if(viewRules&&rows.some(r=>r.weekdayExcluded)&&!rows.some(r=>r.operationStatus==='OPERATING'&&!r.weekdayExcluded))base.routeWeekdayExcluded=true;if(partial||unknownAward)base.operationRequiresRequery=true;else delete base.operationRequiresRequery;if(known)base.operationObservedAt=evidence.week.observedAt;
  return base;
 }
 export function deriveFlightRecord(record,weeks,{now=Date.now(),forcePending=false,viewRules=true}={}){
@@ -95,3 +94,4 @@ export function applyOperationPolicy(records,policy,{now=Date.now(),forcePending
  for(const record of records){if(record.carrier!=='KE'){out.push(record);continue;}try{const next=deriveFlightRecord(record,routes.get(record.origin+':'+record.destination)??[],{now,forcePending});out.push(next);for(const d of next.dates){if(d.status==='NO_FLIGHT')maskedDays++;if(d.operationCompleteOperators)coveredDays++;if(d.operationPending)pendingDays++;if(d.flights.some(f=>f.weekdayExcluded))ruleExcludedDays++;}}catch{warnings.push(`${record.origin} → ${record.destination} ${record.month} 운항 대조 자료 오류로 제외`);}}
  return {records:out,warnings,maskedDays,coveredDays,pendingDays,ruleExcludedDays};
 }
+
