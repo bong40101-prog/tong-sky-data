@@ -10,11 +10,13 @@ const recordKey=r=>[r.carrier,r.origin,r.destination,r.month,r.success,r.sourceU
 export function repeatedMarkerScope(record,catalog){
  if(record.carrier!=='KE')return null;
  for(const [region,cities] of Object.entries(catalog?.regions??{}))for(const city of cities){
+  if(['동북아시아','대한민국'].includes(region))continue;
   if(city.code!==record.origin&&city.code!==record.destination)continue;
   if(region==='유럽')return 'EUROPE';
   if(city.countryCode==='US')return 'US';
   if(region==='미주')return 'AMERICAS';
   if(region==='대양주/괌')return 'OCEANIA';
+  return 'ALL_ROUTES';
  }
  return null;
 }

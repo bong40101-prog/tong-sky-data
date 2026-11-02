@@ -1,9 +1,9 @@
 import {createSummaryCache} from './view-cache.js?v=157';
 import {createNoticeController} from './notices.js?v=154';
-import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=156';
-import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes as filterRoutesRaw,summarize as summarizeRaw,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=157';
-import {collectRepeatHistory,mergeRepeatHistory,readRepeatHistory,writeRepeatHistory,serializeRepeatHistory} from './repeat-history.js?v=153';
-import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=157';
+import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=158';
+import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes as filterRoutesRaw,summarize as summarizeRaw,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=158';
+import {collectRepeatHistory,mergeRepeatHistory,readRepeatHistory,writeRepeatHistory,serializeRepeatHistory} from './repeat-history.js?v=158';
+import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=158';
 import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=148';
 import {projectLegacySavedRecords} from './legacy.js?v=148';
 import {loadTimetableReference,projectTimetableRecords,timetableRouteSummary,lookupTimetableDay} from './timetable.js?v=148';
@@ -115,7 +115,7 @@ function renderRepeatSummary(record){
 function renderRepeatHistory(route){
  const body=$('repeat-history-body');body.replaceChildren();if(state.carrier!=='KE')return;
  const code=state.airport!=='전체'?state.airport:route?.code,labels=['일','월','화','수','목','금','토'];
- $('repeat-history-scope').textContent=(code?state.origin+' ↔ '+code:'전체 유럽·미주·대양주')+' · 저장된 전체 월 · 원본 달력 반복 기준 · 원본 수집 시각 기준 · '+(historySaved?'이 브라우저에 기록 저장':'현재 조회 기록');
+ $('repeat-history-scope').textContent=(code?state.origin+' ↔ '+code:'전체 대한항공 노선')+' · 저장된 전체 월 · 원본 달력 반복 기준 · 원본 수집 시각 기준 · '+(historySaved?'이 브라우저에 기록 저장':'현재 조회 기록');
  const records=repeatHistory.filter(r=>r.dates.some(d=>d>KE_DISPLAY_END)&&(r.origin===state.origin||r.destination===state.origin)&&(!code||r.origin===code||r.destination===code)).sort((a,b)=>a.month.localeCompare(b.month)||a.origin.localeCompare(b.origin)||a.destination.localeCompare(b.destination)||b.success-a.success||a.weekday-b.weekday);
  for(const entry of records){
   const tr=node('tr',entry.kind==='REVIEW'?'repeat-review-row':'repeat-excluded-row');tr.dataset.result=entry.kind;tr.dataset.month=entry.month;tr.dataset.origin=entry.origin;tr.dataset.destination=entry.destination;tr.dataset.weekday=String(entry.weekday);
@@ -166,15 +166,15 @@ export async function loadData(force=false){
  const id=++generation;controller?.abort();controller=new AbortController();const own=controller,carrier=state.carrier,origin=state.origin,key=`${carrier}:${origin}`;state.loading=true;state.selected=null;state.records=[];state.routes=[];message('');status('저장 자료 불러오는 중');stats();renderRoutes();renderCalendar();
  const cached=cache.get(key);if(!force&&cached&&Date.now()-cached.at<60000){finishData(cached.records,cached.errors);return;}
  const timer=setTimeout(()=>own.abort(new Error('연결 시간 초과')),25000);
- try{const [data,operation,timetable]=await Promise.all([loadSavedDataset({catalogs,carriers:[carrier],origin,signal:own.signal,force,onProgress:p=>{if(id===generation)status(`${AIRLINES[p.source.carrier].name} · ${p.source.region} · ${p.completed}/${p.total}구간`);}}),readOperationPolicy(force,own.signal),readTimetable(force,own.signal)]);if(id===generation){acceptOperationPolicy(operation);acceptTimetable(timetable);const result=retainUnavailableRegions(data.results[carrier],cached?.records);cache.set(key,{...result,at:Date.now()});finishData(result.records,result.errors);}}
+ try{const data=await loadSavedDataset({catalogs,carriers:[carrier],origin,signal:own.signal,force,onProgress:p=>{if(id===generation)status(`${AIRLINES[p.source.carrier].name} · ${p.source.region} · ${p.completed}/${p.total}구간`);}});if(id===generation){const result=retainUnavailableRegions(data.results[carrier],cached?.records);cache.set(key,{...result,at:Date.now()});finishData(result.records,result.errors);}}
  catch{if(id===generation)finishData(cached?.records??[],['저장 자료 연결 실패']);}finally{clearTimeout(timer);}
 }
 async function revealMain(){await loadData();$('boot-screen').hidden=true;$('app-screen').hidden=false;noticeController.show();}
 async function bootDatasets(force=false){
  const attempt=++bootAttempt;controller?.abort();controller=new AbortController();const own=controller;$('boot-actions').hidden=true;$('boot-progress').value=0;$('boot-percent').textContent='0%';$('boot-stage').textContent='저장 자료 연결 중';$('boot-detail').textContent='대한항공 · 아시아나 달력을 준비합니다.';
  const timer=setTimeout(()=>own.abort(new Error('연결 시간 초과')),25000);
- try{const [data,operation,timetable]=await Promise.all([loadSavedDataset({catalogs,carriers:['KE','OZ'],origin:state.origin,signal:own.signal,force,onProgress:p=>{if(attempt!==bootAttempt)return;const percent=Math.min(99,Math.floor(p.completed*100/p.total));$('boot-progress').value=percent;$('boot-percent').textContent=percent+'%';$('boot-stage').textContent=AIRLINES[p.source.carrier].name+' · '+p.source.region;$('boot-detail').textContent=`${p.completed}/${p.total}개 구간 처리 완료${p.recordCount!==undefined?' · 현재 지역 '+p.recordCount+'개 노선·월':''}`;}}),readOperationPolicy(force,own.signal),readTimetable(force,own.signal)]);
-  if(attempt!==bootAttempt)return;acceptOperationPolicy(operation);acceptTimetable(timetable);
+ try{const data=await loadSavedDataset({catalogs,carriers:['KE','OZ'],origin:state.origin,signal:own.signal,force,onProgress:p=>{if(attempt!==bootAttempt)return;const percent=Math.min(99,Math.floor(p.completed*100/p.total));$('boot-progress').value=percent;$('boot-percent').textContent=percent+'%';$('boot-stage').textContent=AIRLINES[p.source.carrier].name+' · '+p.source.region;$('boot-detail').textContent=`${p.completed}/${p.total}개 구간 처리 완료${p.recordCount!==undefined?' · 현재 지역 '+p.recordCount+'개 노선·월':''}`;}});
+  if(attempt!==bootAttempt)return;
   for(const [carrier,result] of Object.entries(data.results)){const key=`${carrier}:${state.origin}`,merged=retainUnavailableRegions(result,cache.get(key)?.records);data.results[carrier]=merged;cache.set(key,{...merged,at:Date.now()});}
   const total=Object.values(data.results).reduce((n,r)=>n+limitDisplayRecords(r.records,catalogs.KE).length,0),failed=Object.values(data.results).some(r=>r.errors.length>0)||Boolean(operationWarning);
   if(failed){$('boot-stage').textContent=operationWarning?'운항 대조 자료 연결을 확인하지 못했습니다.':'일부 자료 연결을 확인하지 못했습니다.';$('boot-detail').textContent=`불러온 ${total}개 노선·월은 유지됩니다. 다시 시도하거나 불러온 자료로 볼 수 있습니다.`;$('boot-actions').hidden=false;}

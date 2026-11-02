@@ -95,3 +95,7 @@ test('live Amsterdam original November keeps all source marks and adds no review
  const records=out.filter(r=>(r.origin==='AMS'||r.destination==='AMS')&&r.month==='2026-11');assert.equal(records.length,2);
  for(const r of records){assert.deepEqual(r.repeatMarkerPolicy.reviews,[]);assert.deepEqual(r.repeatMarkerPolicy.excludedDates,[]);for(const d of r.dates)assert.deepEqual(ALL_FIELDS.map(f=>d.savedCalendar[f]),ALL_FIELDS.map(f=>d[f]));}
 });
+test('every catalog destination and both directions share the December boundary, January comparison and partial-month reference',()=>{
+ const cities=Object.entries(catalog.regions).filter(([region])=>!['동북아시아','대한민국'].includes(region)).flatMap(([,cities])=>cities);assert.ok(cities.length>50);
+ for(const city of cities)for(const reverse of [false,true]){const route={origin:reverse?city.code:'ICN',destination:reverse?'ICN':city.code},raw=[record('2026-11',route),record('2026-12',route),record('2027-01',route),record('2027-09',route),record('2027-10',{...route,unknown:[29,30,31]})],out=project(raw);assert.deepEqual(out[0].repeatMarkerPolicy.reviews,[]);assert.deepEqual(out[0].repeatMarkerPolicy.excludedDates,[]);assert.equal(day(out[1],'2026-12-17').repeatMarkerExclusion,undefined);assert.equal(day(out[1],'2026-12-18').repeatMarkerExclusion.referenceMonth,'2027-01');assert.equal(day(out[4],'2027-10-01').repeatMarkerExclusion.referenceMonth,'2027-09');assert.equal(day(out[4],'2027-10-29').repeatMarkerExclusion,undefined);}
+});

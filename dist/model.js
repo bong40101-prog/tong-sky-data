@@ -1,11 +1,11 @@
-import {repeatMarkerCodeshareFlags,repeatMarkerReviewFlags,savedCalendarFlags,repeatedMarkerScope} from './repeat-markers.js?v=156';
+import {repeatMarkerCodeshareFlags,repeatMarkerReviewFlags,savedCalendarFlags,repeatedMarkerScope} from './repeat-markers.js?v=158';
 import {validateClaimedOperationSnapshot} from './operation.js?v=148';
 export const BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v103/';
 export const OZ_BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v101/';
 export const FIELDS=['prestigeAward','prestigeUpgrade','firstCombined'];
 export const ALL_FIELDS=['economyAward','premiumAward','prestigeAward','premiumUpgrade','prestigeUpgrade','firstCombined'];
 export const KE_DISPLAY_END='2026-12-17';
-export function isExtendedKeRoute(record,catalog){return record?.carrier!=='OZ'&&Boolean(catalog?repeatedMarkerScope({...record,carrier:'KE'},catalog):record?.keFutureVisible||record?.region==='유럽'||record?.countryCode==='US'||['EUROPE','US','AMERICAS','OCEANIA'].includes(record?.repeatMarkerPolicy?.scope));}
+export function isExtendedKeRoute(record,catalog){return record?.carrier!=='OZ';}
 export function limitDisplayRecords(records,catalog){return records.flatMap(r=>{if(r.carrier!=='KE')return [r];const extended=isExtendedKeRoute(r,catalog);if(!extended&&r.month>KE_DISPLAY_END.slice(0,7))return [];return [{...r,keFutureVisible:extended,dates:r.dates.filter(d=>extended||d.date<=KE_DISPLAY_END).map(d=>({...d,keFutureVisible:extended}))}];});}
 export const AIRLINES={KE:{name:'대한항공',cabin:'프레스티지',labels:['프레스티지 보너스','프레스티지 승급','퍼스트 보너스·승급 합산'],source:'https://www.koreanair.com/booking/book-and-manage/award-seat-availability'},OZ:{name:'아시아나',cabin:'비즈니스',labels:['비즈니스 보너스','비즈니스 승급'],source:'https://flyasiana.com/I/KR/KO/MileageSeatSearch.do'}};
 export const EXCLUDED_REGIONS=['동북아시아','대한민국'];
