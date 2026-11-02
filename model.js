@@ -1,8 +1,10 @@
-import {validateClaimedOperationSnapshot} from './operation.js?v=139';
+import {validateClaimedOperationSnapshot} from './operation.js?v=140';
 export const BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v102/';
 export const OZ_BASE='https://raw.githubusercontent.com/bong40101-prog/tong-sky-data/tong-sky-data/data/mobile/v101/';
 export const FIELDS=['prestigeAward','prestigeUpgrade','firstCombined'];
 export const ALL_FIELDS=['economyAward','premiumAward','prestigeAward','premiumUpgrade','prestigeUpgrade','firstCombined'];
+export const KE_DISPLAY_END='2026-12-17';
+export function limitDisplayRecords(records){return records.flatMap(r=>r.carrier!=='KE'?[r]:r.month>KE_DISPLAY_END.slice(0,7)?[]:[{...r,dates:r.dates.filter(d=>d.date<=KE_DISPLAY_END)}]);}
 export const AIRLINES={KE:{name:'대한항공',cabin:'프레스티지',labels:['프레스티지 보너스','프레스티지 승급','퍼스트 보너스·승급 합산'],source:'https://www.koreanair.com/booking/book-and-manage/award-seat-availability'},OZ:{name:'아시아나',cabin:'비즈니스',labels:['비즈니스 보너스','비즈니스 승급'],source:'https://flyasiana.com/I/KR/KO/MileageSeatSearch.do'}};
 export const REGIONS=['유럽','미주','동남아시아/서남아시아','동북아시아','대양주/괌','러시아/몽골/중앙아시아','중동/아프리카','대한민국'];
 export class DataError extends Error{}
@@ -15,7 +17,7 @@ export function daysInMonth(month){return new Date(Date.UTC(Number(month.slice(0
 export function validDate(value){return /^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;}
 export function validMonth(value){return /^\d{4}-(0[1-9]|1[0-2])$/.test(value);}
 export function selectedFields(carrier,seat='all'){const count=carrier==='OZ'?2:3;return FIELDS.slice(0,count).filter((field,i)=>seat==='all'||seat===String(i));}
-export function hasMark(day,carrier,seat='all'){return day?.status==='OBSERVED'&&selectedFields(carrier,seat).some(field=>day[field]===true);}
+export function hasMark(day,carrier,seat='all'){return (carrier!=='KE'||day?.date<=KE_DISPLAY_END)&&day?.status==='OBSERVED'&&selectedFields(carrier,seat).some(field=>day[field]===true);}
 const timestamp=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value));
 export async function unpackDocument(input,{maxBytes=32*1024*1024}={}){
  if(!input||typeof input!=='object')throw new DataError('저장 자료 형식을 확인하지 못했습니다.');
@@ -55,6 +57,7 @@ export function makeRoutes(records,catalog,origin){
  return [...routes.values()];
 }
 export function summarize(route,{carrier,seat='all',start,end,month:chosenMonth,direction}){
+ if(carrier==='KE'&&end>KE_DISPLAY_END)end=KE_DISPLAY_END;
  const fields=selectedFields(carrier),byType=Object.fromEntries(fields.map(field=>[field,0]));
  let marked=0,observed=0,noFlight=0,months=0,latest=0,nearest=null;
  for(const [legName,leg] of Object.entries(route.legs))for(const [month,record] of leg){
@@ -72,6 +75,7 @@ export function filterRoutes(routes,filter){
  const q=(filter.query??'').trim().toLocaleLowerCase();return routes.filter(route=>(filter.region==='전체'||route.region===filter.region)&&(!filter.country||filter.country==='전체'||route.countryCode===filter.country)&&(!filter.airport||filter.airport==='전체'||route.code===filter.airport)&&(!q||`${route.code} ${route.name}`.toLocaleLowerCase().includes(q))).map(route=>({...route,summary:summarize(route,filter)})).filter(route=>route.summary.months>0&&(!filter.onlyMarked||route.summary.marked>0)).sort((a,b)=>(a.summary.nearest??'9999').localeCompare(b.summary.nearest??'9999')||b.summary.marked-a.summary.marked||a.name.localeCompare(b.name,'ko'));
 }
 export function cellInfo(route,direction,date,carrier,seat='all'){
+ if(carrier==='KE'&&date>KE_DISPLAY_END)return {kind:'outside',label:'대한항공 임시 조회 범위 밖',marks:[]};
  const record=route?.legs[direction]?.get(date.slice(0,7));const day=record?.dates.find(x=>x.date===date);if(day?.timetableConflict&&day.status==='UNKNOWN')return {kind:'unknown',label:'운항 일정 불일치 · 표식 제외',day,record,marks:[]};if(day?.routeWeekdayExcluded)return {kind:'unknown',label:'비운항 · 지정 요일 기준',day,record,marks:[]};if(!day||day.status==='UNKNOWN')return {kind:'unknown',label:day?.legacyAwardFlags?'항공편별 재조회 필요':day?.operationPending?'항공편 운항 대조 전':'미조회·미확인',day,record,marks:[]};
  if(day.status==='NO_FLIGHT')return {kind:'noflight',label:day.operationSource==='KE_WEEKLY_SCHEDULE_ALL_OPERATORS'?'전체 운항편 없음 · 항공편별 스케줄 대조':'운항편 없음 · 저장 자료 기준',day,record,marks:[]};
  const marks=FIELDS.slice(0,carrier==='OZ'?2:3).map((field,i)=>({field,index:i,label:AIRLINES[carrier].labels[i]})).filter(m=>selectedFields(carrier,seat).includes(m.field)&&day[m.field]===true);
