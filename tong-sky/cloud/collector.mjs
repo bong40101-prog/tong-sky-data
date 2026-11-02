@@ -1,8 +1,11 @@
 import {createHash} from 'node:crypto';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
 import {DELAY_MS,kstDay,plan,key,merge,read,write,progress} from './model.mjs';
+import {includedRegions,assertIncludedRegion} from './region-policy.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url)),args=process.argv.slice(2),probe=args.includes('--probe');
-const catalog=read(path.join(here,'../src/main/assets/regions.json')),script=fs.readFileSync(path.join(here,'../src/main/assets/calendar.js'),'utf8');
+const catalog=read(path.join(here,'../src/main/assets/regions.json'));
 const source=catalog.source,origin=process.env.SKY_ORIGIN||'ICN',region=process.env.SKY_REGION||'유럽',day=kstDay();
+assertIncludedRegion(catalog,region);
+const script=fs.readFileSync(path.join(here,'../src/main/assets/calendar.js'),'utf8');
 const root=path.resolve(process.env.SKY_DATA_DIR||path.join(here,'data')),shard=Number(process.env.SKY_SHARD||0),regionId=catalog.ids[region],statusFile=path.join(root,'shards',regionId+'-'+shard+'.json');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));class Stop extends Error{}
 let previous=read(statusFile),queries=probe?['CDG','SGN'].map(destination=>({origin,destination,month:plan(origin,[{code:destination}])[1].month})):plan(origin,catalog.regions[region].filter(a=>!process.env.SKY_CODES_JSON||JSON.parse(process.env.SKY_CODES_JSON).includes(a.code)));
@@ -11,7 +14,7 @@ let state=!probe&&previous?.day===day?{...previous,state:'running',error:''}:{sc
 if(state.total!==queries.length)throw Error('Plan changed during a resumable run');
 const published=(buildBundles=false)=>{state.percent=progress(state);state.updatedAt=new Date().toISOString();write(statusFile,state);aggregate(buildBundles);if(process.env.SKY_PUBLISH==='1'){const r=spawnSync('python3',[path.join(here,'publish.py'),root],{stdio:'inherit',env:process.env});if(r.status!==0)throw new Stop('Result publishing failed; stopping collection');}};
 function aggregate(buildBundles=false){
- const regionDir=path.join(root,'shards');for(const [name,id] of Object.entries(catalog.ids)){
+ const regionDir=path.join(root,'shards');for(const [name] of includedRegions(catalog)){const id=catalog.ids[name];
   const shards=fs.existsSync(regionDir)?fs.readdirSync(regionDir).filter(f=>f.startsWith(id+'-')&&f.endsWith('.json')).map(f=>read(path.join(regionDir,f))).filter(s=>s.day===day):[];if(!shards.length)continue;
   const total=plan(origin,catalog.regions[name]).length,completed=shards.reduce((a,s)=>a+s.completed,0),succeeded=shards.reduce((a,s)=>a+s.succeeded,0),failed=shards.reduce((a,s)=>a+s.failed,0),stopped=shards.find(s=>s.state==='stopped');
   let bundleVersion=read(path.join(root,'regions',id+'.json'))?.bundleVersion||null;if(buildBundles){const records=plan(origin,catalog.regions[name]).map(q=>read(path.join(root,'snapshots',key(q)+'.json'))).filter(Boolean);if(records.length){bundleVersion=createHash('sha256').update(JSON.stringify(records)).digest('hex');write(path.join(root,'bundles',id+'.json'),{schema:1,origin,region:name,bundleVersion,records});}}
