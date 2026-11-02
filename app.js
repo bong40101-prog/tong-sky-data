@@ -1,11 +1,14 @@
+import {createSummaryCache} from './view-cache.js?v=157';
 import {createNoticeController} from './notices.js?v=154';
 import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=156';
-import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=156';
+import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes as filterRoutesRaw,summarize as summarizeRaw,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=157';
 import {collectRepeatHistory,mergeRepeatHistory,readRepeatHistory,writeRepeatHistory,serializeRepeatHistory} from './repeat-history.js?v=153';
-import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=156';
+import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=157';
 import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=148';
 import {projectLegacySavedRecords} from './legacy.js?v=148';
 import {loadTimetableReference,projectTimetableRecords,timetableRouteSummary,lookupTimetableDay} from './timetable.js?v=148';
+const summarize=createSummaryCache(summarizeRaw);
+const filterRoutes=(routes,filter)=>filterRoutesRaw(routes,filter,summarize);
 const $=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const today=todayKST();
@@ -81,7 +84,7 @@ function renderRoutes(){
  for(const route of state.filtered){const b=node('button','route-card'+(route.code===state.selected?' selected':''));b.type='button';b.dataset.code=route.code;b.setAttribute('aria-pressed',String(route.code===state.selected));
  const top=node('div','route-row');const city=node('div','city-name');city.append(node('strong','',route.name),node('span','airport-code',route.code));const arrow=node('span','route-arrow','↗');top.append(city,arrow);
  const middle=node('div','route-row');middle.append(node('span','route-location',`${state.origin} ↔ ${route.code}`),node('span','count-scope','가는 편 · 오는 편'));
- const bottom=node('div','route-row route-meta');bottom.append(node('span','',route.country||route.region.split('/')[0]),node('span','',route.totalSummary.nearest?`가장 가까운 날 ${displayDate(route.totalSummary.nearest)}`:`저장 ${route.totalSummary.months}개 노선·월`));const current=node('div','route-current-calendar');current.append(node('p','current-calendar-heading',`현재 달력 · ${Number(state.month.slice(5))}월 · ${state.direction==='out'?'가는 편':'오는 편'}`),typeCounts(route.summary,'route-type-counts',true));b.append(top,middle,periodTotals(route),current,bottom);b.addEventListener('click',()=>{state.selected=route.code;renderRoutes();renderCalendar();});list.append(b);}
+ const bottom=node('div','route-row route-meta');bottom.append(node('span','',route.country||route.region.split('/')[0]),node('span','',route.totalSummary.nearest?`가장 가까운 날 ${displayDate(route.totalSummary.nearest)}`:`저장 ${route.totalSummary.months}개 노선·월`));const current=node('div','route-current-calendar');current.append(node('p','current-calendar-heading',`현재 달력 · ${Number(state.month.slice(5))}월 · ${state.direction==='out'?'가는 편':'오는 편'}`),typeCounts(route.summary,'route-type-counts',true));b.append(top,middle,periodTotals(route),current,bottom);b.addEventListener('click',()=>{state.selected=route.code;for(const card of list.querySelectorAll('.route-card')){const active=card.dataset.code===state.selected;card.classList.toggle('selected',active);card.setAttribute('aria-pressed',String(active));}renderCalendar();});list.append(b);}
 }
 function nonoperationCaption(cls='day-unknown'){const caption=node('span',cls+' ke-nonoperation');caption.append(node('span','ke-nonoperation-title','대한항공 비운항'),node('span','ke-nonoperation-codeshare','공동운항 있을 수 있음'));return caption;}
 function renderCalendar(){

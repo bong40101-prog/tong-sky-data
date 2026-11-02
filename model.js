@@ -76,8 +76,8 @@ export function summarize(route,{carrier,seat='all',start,end,month:chosenMonth,
  }
  return {marked,observed,savedAggregateDays,noFlight,months,latest,nearest,byType};
 }
-export function filterRoutes(routes,filter){
- const q=(filter.query??'').trim().toLocaleLowerCase();return routes.filter(route=>(filter.region==='전체'||route.region===filter.region)&&(!filter.country||filter.country==='전체'||route.countryCode===filter.country)&&(!filter.airport||filter.airport==='전체'||route.code===filter.airport)&&(!q||`${route.code} ${route.name}`.toLocaleLowerCase().includes(q))).map(route=>({...route,summary:summarize(route,filter)})).filter(route=>route.summary.months>0&&(!filter.onlyMarked||route.summary.marked>0)).sort((a,b)=>(a.summary.nearest??'9999').localeCompare(b.summary.nearest??'9999')||b.summary.marked-a.summary.marked||a.name.localeCompare(b.name,'ko'));
+export function filterRoutes(routes,filter,summarizeRoute=summarize){
+ const q=(filter.query??'').trim().toLocaleLowerCase();return routes.filter(route=>(filter.region==='전체'||route.region===filter.region)&&(!filter.country||filter.country==='전체'||route.countryCode===filter.country)&&(!filter.airport||filter.airport==='전체'||route.code===filter.airport)&&(!q||`${route.code} ${route.name}`.toLocaleLowerCase().includes(q))).map(route=>({...route,summary:summarizeRoute(route,filter)})).filter(route=>route.summary.months>0&&(!filter.onlyMarked||route.summary.marked>0)).sort((a,b)=>(a.summary.nearest??'9999').localeCompare(b.summary.nearest??'9999')||b.summary.marked-a.summary.marked||a.name.localeCompare(b.name,'ko'));
 }
 function baseCellInfo(route,direction,date,carrier,seat='all'){
  if(carrier==='KE'&&!isExtendedKeRoute(route)&&date>KE_DISPLAY_END)return {kind:'outside',label:'대한항공 해당 지역의 임시 조회 범위 밖',marks:[]};
