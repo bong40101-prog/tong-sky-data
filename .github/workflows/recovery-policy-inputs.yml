@@ -1,0 +1,40 @@
+name: Native recovery fixtures and public download smoke
+on:
+  push:
+    branches: ['recovery/tongsky-1040']
+    paths: ['.github/workflows/recovery-policy-inputs.yml']
+permissions:
+  contents: read
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 4c0f1f09e127207fef334144bb0699a4b2c1cda3
+          persist-credentials: false
+          sparse-checkout: |
+            data/mobile/v102/ICN
+            data/mobile/v101/ICN
+      - name: Prepare actual saved data and host JSON implementation
+        run: |
+          set -euo pipefail
+          mkdir replay
+          cp data/mobile/v102/ICN/{europe,americas}.json data/mobile/v101/ICN/asiana.json replay/
+          curl -fsSL --retry 2 https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar -o replay/json.jar
+          curl -fsSL --retry 2 https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar.sha1 -o /tmp/json.sha1
+          echo "$(cat /tmp/json.sha1)  replay/json.jar" | sha1sum -c -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pinned-native-replay-inputs
+          path: replay/
+          retention-days: 2
+      - name: Check HTTPS landing page, published binary, and closed search flag
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 https://bong40101-prog.github.io/tong-series/ -o /tmp/landing.html
+          grep -q 'href="TongSKY-1.0.40.apk"' /tmp/landing.html
+          curl -fsSL --retry 3 https://bong40101-prog.github.io/tong-series/TongSKY-1.0.40.apk -o /tmp/public.apk
+          echo 'e97e2e19954ebebe87790861819b5bb6f53c0a8571926b3a386b7364a0d08efe  /tmp/public.apk' | sha256sum -c -
+          curl -fsSL --retry 3 https://bong40101-prog.github.io/tong-sky-data/maintenance.json | jq -e '.closed == true'
