@@ -54,6 +54,6 @@ test('combined old Asiana document drops excluded destinations before region gro
 test('excluded Korean Air documents are never fetched while successful retained regional reads still finish',async()=>{
  const calls=[],loaded=await loadSavedDataset({catalogs,carriers:['KE','OZ'],origin:'ICN',fetcher:async url=>{calls.push(url);return new Response('',{status:404});}});
  assert.equal(loaded.completed,13);assert.equal(loaded.total,13);assert.equal(calls.length,7);
- assert.ok(calls.every(url=>!url.endsWith('/east_asia.json')&&!url.endsWith('/korea.json')));
- assert.ok(calls.some(url=>url.endsWith('/europe.json')));assert.ok(calls.some(url=>url.endsWith('/americas.json')));assert.ok(calls.some(url=>url.endsWith('/se_asia.json')));assert.ok(calls.some(url=>url.endsWith('/asiana.json')));
+ assert.ok(calls.every(url=>!url.split('?')[0].endsWith('/east_asia.json')&&!url.split('?')[0].endsWith('/korea.json')));
+ assert.ok(calls.some(url=>url.split('?')[0].endsWith('/europe.json')));assert.ok(calls.some(url=>url.split('?')[0].endsWith('/americas.json')));assert.ok(calls.some(url=>url.split('?')[0].endsWith('/se_asia.json')));assert.ok(calls.some(url=>url.split('?')[0].endsWith('/asiana.json')));
 });
