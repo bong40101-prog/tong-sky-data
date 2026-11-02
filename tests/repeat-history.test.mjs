@@ -47,3 +47,14 @@ test('privacy-denied and quota-exceeded storage failures retain current in-memor
   assert.deepEqual(readRepeatHistory(denied),[]);const result=writeRepeatHistory(events,denied);assert.equal(result.saved,false);assert.equal(result.error,'QuotaExceededError');assert.deepEqual(result.events,events);
   let called=false;writeRepeatHistory(events,{setItem(key){called=key===REPEAT_HISTORY_KEY;}});assert.equal(called,true);
 });
+
+test('reset removes old Korean Air decisions once without erasing new decisions', () => {
+ const values=new Map([['tongsky.repeat-marker-history.v1',serializeRepeatHistory(collectRepeatHistory([record()]))]]);
+ const storage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+ assert.deepEqual(readRepeatHistory(storage),[]);
+ assert.equal(values.has('tongsky.repeat-marker-history.v1'),false);
+ const current=collectRepeatHistory([record()]);
+ writeRepeatHistory(current,storage);
+ assert.deepEqual(readRepeatHistory(storage),current);
+ assert.deepEqual(readRepeatHistory(storage),current);
+});
