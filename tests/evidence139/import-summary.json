@@ -1,0 +1,40 @@
+{
+  "inputRows": {
+    "대한항공 직접운항": 540,
+    "공동운항 한국왕복": 669
+  },
+  "uniqueRules": 889,
+  "routes": 255,
+  "directRoutes": 232,
+  "partnerRoutes": 99,
+  "coverage": {
+    "WEEKDAYS": 435,
+    "DATES_ONLY": 450,
+    "UNRESOLVED": 4
+  },
+  "operators": [
+    "AA",
+    "AF",
+    "CI",
+    "DL",
+    "EK",
+    "FM",
+    "GA",
+    "HY",
+    "JL",
+    "KE",
+    "KL",
+    "MF",
+    "MH",
+    "MU",
+    "OM",
+    "OZ",
+    "UL",
+    "VN",
+    "VS",
+    "WS"
+  ],
+  "sha256": "82e27d2974a8ce7105a9563327d6f26ef86433148770fe381fa3f6b1dab6d0e3",
+  "bytes": 556252,
+  "completeOperators": false
+}

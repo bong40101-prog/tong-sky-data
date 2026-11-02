@@ -1,0 +1,41 @@
+{
+  "audit": "independent timetable integration review",
+  "scope": "read-only production source inspection; independent Node execution against actual 889-rule reference",
+  "webIndependentExecution": {
+    "passed": 16,
+    "failed": 0,
+    "cases": [
+      "actual JSON 889 rules load",
+      "FRA September Monday NO_FLIGHT",
+      "FRA unlisted October date UNKNOWN",
+      "FRA return exact October confirmed date OPERATING",
+      "2027-11-01 UNKNOWN",
+      "UNRESOLVED retained audit date UNKNOWN",
+      "overlapping positive+unknown positive union",
+      "input record unchanged",
+      "sole conflicted flight day UNKNOWN",
+      "sole conflicted six flags false",
+      "sole conflicted summary observed=0",
+      "sole conflicted calendar unknown",
+      "direct operator conflict only",
+      "partner positive preserved",
+      "partner positive day OBSERVED",
+      "unknown actual operator cannot match by KE marketing number"
+    ]
+  },
+  "nativeSourceReview": {
+    "actualAssetTestExists": true,
+    "soleConflictSeatEligibility": "No eligible flights => verified=false => gray calendar and dashboard does not count observed zero",
+    "pendingBoundaryFinding": "Conflict plus valid partner with all six flags false: current native candidate leaves day OBSERVED/verified true through partner; web and OperationSchedule partial-zero contract use UNKNOWN. Parent and native owner notified."
+  },
+  "previousIssues": {
+    "UNRESOLVEDAuditDateValidation": "native validator fixed to allow original audit dates while keeping state UNKNOWN",
+    "positiveUnknownUnionParity": "web now agrees with native any known positive confirms schedule presence"
+  },
+  "sourceHashesAtReview": {
+    "web-tong-sky-139/dist/timetable.js": "318cb8187a65fdfab1fd3db6cb6d68f5dc3cc3feee2399f173f64db82f8e0440",
+    "web-tong-sky-139/dist/model.js": "5eb06b7bfaa8ca013f85cea2e47e30300c2c0bc8550abdb5d1fc68a239e7a856",
+    "tong-sky-139/tong-sky/src/main/java/kr/tong/sky/TimetableReference.java": "a402cc03000d60a2ce6850ee8a7f9d8b8f1035e3e1bdb8f5a60288060b1958d2",
+    "tong-sky-139/tong-sky/src/main/java/kr/tong/sky/SeatMarks.java": "822baa9ee3311aa88ebd53abd8d2c0ba9336d37295e0d2d62c92468d3d7c791d"
+  }
+}

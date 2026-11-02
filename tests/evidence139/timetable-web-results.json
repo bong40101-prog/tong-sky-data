@@ -1,0 +1,31 @@
+{
+  "version": "1.0.39",
+  "scope": "Web user-supplied bounded operating timetable reference",
+  "tests": {
+    "tests": 160,
+    "pass": 160,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "log": "tests/evidence139/web139-tests.log",
+  "sourceKind": "USER_SUPPLIED_TIMETABLE",
+  "completeOperators": false,
+  "limitations": [
+    "Reference is not a full all-operator weekly observation or seat evidence.",
+    "Legacy aggregate-only KE records still require per-flight recapture.",
+    "Asiana behavior is unchanged."
+  ],
+  "files": {
+    "dist/timetable.js": "318cb8187a65fdfab1fd3db6cb6d68f5dc3cc3feee2399f173f64db82f8e0440",
+    "dist/app.js": "74ee567aab10638ae193edf9071512e0e7170920a948f90e075fd6fcb83fc9df",
+    "dist/model.js": "5eb06b7bfaa8ca013f85cea2e47e30300c2c0bc8550abdb5d1fc68a239e7a856",
+    "dist/data.js": "e650b70572c4e37b866583384df926214771be059e746729e17548e5c5a19cb9",
+    "dist/index.html": "3312382742f597890517f46928b274dfd6e128ffb10a935030f3a996a99e45d5",
+    "dist/styles.css": "b3a8d323da879e18ce86e34dfd7b65d36244e0153cf37dde67995f07ea562d9c",
+    "dist/timetable-reference.json": "82e27d2974a8ce7105a9563327d6f26ef86433148770fe381fa3f6b1dab6d0e3",
+    "tests/timetable.test.mjs": "f6b95a9e683267e0ec97e8cf38b2e9bd6fe10c1c181030c4c0292e7f78183a2c",
+    "tests/ui.test.mjs": "db7efef7027ac32528de29b674ff4d8227d2e2d25f3f258417baf9357047d816",
+    "README.md": "83548fa3896db4497a6f5f5e6df740f070aa10566bc2b01889bd84cc184be45c"
+  }
+}

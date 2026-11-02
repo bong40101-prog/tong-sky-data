@@ -1,0 +1,93 @@
+{
+  "audit": "independent XLSX XML versus bounded timetable reference",
+  "method": "Read ZIP/XML directly with stdlib, independently reconstruct every original row and comma-separated month interval; no importer helper used.",
+  "workbook": "upload/대한항공_운항요일_2개목록_20261102(1).xlsx",
+  "workbookSha256": "9cbc28ca8b456bc0d1bf93e5424f196407e74a4a45ad8b8dce83b7095088785e",
+  "reference": "operations139/timetable-reference.json",
+  "referenceSha256": "82e27d2974a8ce7105a9563327d6f26ef86433148770fe381fa3f6b1dab6d0e3",
+  "passed": true,
+  "sourceRows": {
+    "대한항공 직접운항": 540,
+    "공동운항 한국왕복": 669
+  },
+  "totalSourceRows": 1209,
+  "distinctSourceRowsRepresented": 1209,
+  "splitSourceIntervals": 1251,
+  "completeWeekdayIntervals": 623,
+  "partialDateIntervals": 624,
+  "unresolvedIntervals": 4,
+  "uniqueRules": 889,
+  "directionalRoutes": 255,
+  "completeOperators": false,
+  "checkedFields": [
+    "directional airport pair",
+    "actual operator name/code",
+    "service kind",
+    "start/end clipping",
+    "comma-separated month gaps",
+    "weekdays",
+    "explicit noFlightWeekdays",
+    "partial confirmedDates",
+    "source note",
+    "source URL retention",
+    "source row provenance"
+  ],
+  "edgeCases": [
+    {
+      "case": "FRA both directions",
+      "result": "WED/FRI/SUN rule valid through 2027-09-30; October DATES_ONLY retains 11 exact confirmed dates and no negative weekdays."
+    },
+    {
+      "case": "CDG direct versus codeshare",
+      "result": "KE Sunday NO_FLIGHT reference is separate from AF and OZ operator reference windows; partner dates are not masked merely because KE is off."
+    },
+    {
+      "case": "Missing 2027-11-01",
+      "result": "No applicable source record; remains UNKNOWN."
+    },
+    {
+      "case": "Source conflicts",
+      "result": "Four MIAT rows are UNRESOLVED with empty negative sets; conflicting weekdays cannot assert NO_FLIGHT."
+    },
+    {
+      "case": "Partial months",
+      "result": "Every explicitly listed date and range matched exact source date list after request-bound clipping; unlisted dates are not negative."
+    },
+    {
+      "case": "Discontinuous application months",
+      "result": "Comma-separated month periods expand to separate intervals without filling intervening months."
+    },
+    {
+      "case": "Repeated KE rows on joint sheet",
+      "result": "Identical facts merged while retaining both source row references and all source URLs."
+    }
+  ],
+  "findings": [],
+  "caution": "This audit validates faithful conversion of the supplied workbook. It does not independently certify third-party timetable accuracy or turn references into complete weekly provider observations.",
+  "weekdayContract": {
+    "Sunday": 0,
+    "Monday": 1,
+    "Tuesday": 2,
+    "Wednesday": 3,
+    "Thursday": 4,
+    "Friday": 5,
+    "Saturday": 6,
+    "interpretation": "departure-local calendar date"
+  },
+  "integrationReview": {
+    "weekdayParity": "Java DayOfWeek.getValue()%7 and JS getUTCDay both match Sunday0..Saturday6",
+    "nativeValidatorIssue": "Candidate validator initially rejected UNRESOLVED confirmedDates retained for audit; sent to parent/native owner for repair. UNRESOLVED must remain UNKNOWN.",
+    "multiRuleParityIssue": "Initial web candidate unanimous-state aggregation disagreed with native positive-union for 87 ON+UNKNOWN operator dates. Sent to parent/web owner. Any known ON proves operator schedule presence; negative requires all matching rows explicitly OFF.",
+    "overlappingOperatorDates": 3819,
+    "mixedStates": {
+      "NO_FLIGHT+UNKNOWN": 88,
+      "OPERATING+UNKNOWN": 87
+    },
+    "positiveUnknownExample": {
+      "origin": "AMS",
+      "destination": "ICN",
+      "operatorCode": "KE",
+      "date": "2027-03-28"
+    }
+  }
+}
