@@ -1,6 +1,7 @@
 // User-selected display heuristic, not airline operation evidence.
 const RULE='USER_ALL_WEEKDAYS_TRIPLET_V2';
 const REFERENCE_RULE='USER_REFERENCE_MONTH_TRIPLET_V3';
+export const ORIGINAL_CALENDAR_END='2026-12-17';
 const FIELDS=['economyAward','premiumAward','prestigeAward','premiumUpgrade','prestigeUpgrade','firstCombined'];
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const validDate=date=>typeof date==='string'&&DATE.test(date)&&Number.isFinite(Date.parse(date+'T00:00:00Z'))&&new Date(date+'T00:00:00Z').toISOString().slice(0,10)===date;
@@ -58,9 +59,12 @@ function inventory(record){
  return {expected,days,duplicates,invalid,complete:!invalid&&!duplicates.size&&expected.every(date=>known(days.get(date))),known};
 }
 export function repeatedMarkerRule(record,catalog,projectedRecord=record,relatedRecords=[]){
+ const scope=repeatedMarkerScope(record,catalog);
+ if(scope&&validDate(record.month+'-01')&&record.month<'2026-12')return {source:RULE,scope,month:record.month,origin:record.origin,destination:record.destination,candidateDates:[],weekdays:[],evidence:[],reviews:[]};
  const base=ownMonthRule(record,catalog,projectedRecord);if(!base)return null;
  const current=inventory(record),december=record.month==='2026-12';
- if(current.invalid||current.duplicates.size||(!december&&current.complete))return base;
+ if(current.invalid||current.duplicates.size)return december?{...base,candidateDates:[],weekdays:[],evidence:[],reviews:[]}:base;
+ if(!december&&current.complete)return base;
  const latest=new Map();for(const r of relatedRecords){if(r.carrier!==record.carrier||r.origin!==record.origin||r.destination!==record.destination||!validDate(r.month+'-01'))continue;const old=latest.get(r.month);if(!old||(r.success??0)>(old.success??0))latest.set(r.month,r);}
  const reference=december?latest.get('2027-01'):[...latest.values()].filter(r=>r.month<record.month&&r.month!=='2026-12'&&inventory(r).complete).sort((a,b)=>b.month.localeCompare(a.month))[0];
  if(!december&&!reference)return base;
@@ -94,10 +98,12 @@ export function projectRepeatedMarkerRecords(rawRecords,records,catalog){
  const sources=new Map(rawRecords.map(r=>[recordKey(r),r]));
  return records.map(record=>{
   const raw=sources.get(recordKey(record)),rule=raw?repeatedMarkerRule(raw,catalog,record,rawRecords):null;
-  if(!rule&&!record.repeatMarkerPolicy)return record;
+  const preserveOriginal=record.carrier==='KE'&&record.month<=ORIGINAL_CALENDAR_END.slice(0,7);
+  if(!rule&&!record.repeatMarkerPolicy&&!preserveOriginal)return record;
   const next={...record};delete next.repeatMarkerPolicy;const rawDays=new Map((raw?.dates??[]).map(d=>[d.date,d]));
   next.dates=record.dates.map(day=>{
    const clean={...day};delete clean.repeatMarkerExclusion;delete clean.repeatMarkerReview;delete clean.repeatMarkerReviewFlags;delete clean.savedCalendar;
+   if(preserveOriginal&&validDate(day.date)&&day.date<=ORIGINAL_CALENDAR_END){clean.savedCalendar=storedCalendar(rawDays.get(day.date)??day);for(const key of ['routeWeekdayExcluded','timetableConflict','operationPending'])delete clean[key];return clean;}
    if(!rule||!validDate(day.date)||day.date.slice(0,7)!==rule.month)return clean;
    const original=rawDays.get(day.date);clean.savedCalendar=storedCalendar(original??day);const wd=weekday(day.date);
    const proof=rule.evidence.find(p=>p.weekday===wd&&p.dates.includes(day.date));

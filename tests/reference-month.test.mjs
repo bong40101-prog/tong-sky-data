@@ -79,3 +79,19 @@ test('real phone Rome snapshots remove eight false badge dates in each December 
  for(const r of out.filter(r=>r.origin==='LHR'||r.destination==='LHR'))assert.deepEqual(r.repeatMarkerPolicy.weekdays,[]);
  assert.deepEqual(raw,before);
 });
+test('every KE route keeps original November and December1–17 without inferred review or exclusions',()=>{
+ for(const destination of ['AMS','FCO','JFK','YYZ','SYD','BKK','DXB','SVO'])for(const reverse of [false,true])for(const month of ['2026-11','2026-12']){
+  const raw=record(month,{origin:reverse?destination:'ICN',destination:reverse?'ICN':destination});
+  const view=structuredClone(raw);for(const d of view.dates){d.status='UNKNOWN';for(const f of ALL_FIELDS)d[f]=false;d.routeWeekdayExcluded=true;d.repeatMarkerReview={weekday:0};d.repeatMarkerExclusion={weekday:0};}
+  const out=projectRepeatedMarkerRecords([raw],[view],catalog)[0];
+  for(const d of out.dates.filter(d=>d.date<='2026-12-17')){assert.equal(d.repeatMarkerReview,undefined);assert.equal(d.repeatMarkerExclusion,undefined);assert.equal(d.routeWeekdayExcluded,undefined);assert.equal(d.savedCalendar.status,'OBSERVED');assert.deepEqual(ALL_FIELDS.map(f=>d.savedCalendar[f]),ALL_FIELDS.map(f=>day(raw,d.date)[f]));}
+ }
+});
+test('invalid December source cannot fall back to an unbounded monthly inference before December18',()=>{
+ const raw=record('2026-12');raw.dates.push({...raw.dates[0]});const out=project([raw,record('2027-01')])[0];assert.deepEqual(out.repeatMarkerPolicy.evidence,[]);assert.deepEqual(out.repeatMarkerPolicy.reviews,[]);
+});
+test('live Amsterdam original November keeps all source marks and adds no review on either direction',async()=>{
+ const body=await unpackDocument(JSON.parse(await readFile(new URL('fixtures/europe-original-live.json',import.meta.url))));const raw=readDocument(body,{carrier:'KE',origin:'ICN',region:'유럽'}),out=project(raw);
+ const records=out.filter(r=>(r.origin==='AMS'||r.destination==='AMS')&&r.month==='2026-11');assert.equal(records.length,2);
+ for(const r of records){assert.deepEqual(r.repeatMarkerPolicy.reviews,[]);assert.deepEqual(r.repeatMarkerPolicy.excludedDates,[]);for(const d of r.dates)assert.deepEqual(ALL_FIELDS.map(f=>d.savedCalendar[f]),ALL_FIELDS.map(f=>d[f]));}
+});
