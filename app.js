@@ -1,8 +1,8 @@
 import {createNoticeController} from './notices.js?v=154';
-import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=153';
-import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=153';
+import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=156';
+import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=156';
 import {collectRepeatHistory,mergeRepeatHistory,readRepeatHistory,writeRepeatHistory,serializeRepeatHistory} from './repeat-history.js?v=153';
-import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=153';
+import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=156';
 import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=148';
 import {projectLegacySavedRecords} from './legacy.js?v=148';
 import {loadTimetableReference,projectTimetableRecords,timetableRouteSummary,lookupTimetableDay} from './timetable.js?v=148';
@@ -113,7 +113,7 @@ function renderRepeatHistory(route){
  const body=$('repeat-history-body');body.replaceChildren();if(state.carrier!=='KE')return;
  const code=state.airport!=='전체'?state.airport:route?.code,labels=['일','월','화','수','목','금','토'];
  $('repeat-history-scope').textContent=(code?state.origin+' ↔ '+code:'전체 유럽·미주·대양주')+' · 저장된 전체 월 · 원본 달력 반복 기준 · 원본 수집 시각 기준 · '+(historySaved?'이 브라우저에 기록 저장':'현재 조회 기록');
- const records=repeatHistory.filter(r=>(r.origin===state.origin||r.destination===state.origin)&&(!code||r.origin===code||r.destination===code)).sort((a,b)=>a.month.localeCompare(b.month)||a.origin.localeCompare(b.origin)||a.destination.localeCompare(b.destination)||b.success-a.success||a.weekday-b.weekday);
+ const records=repeatHistory.filter(r=>r.dates.some(d=>d>KE_DISPLAY_END)&&(r.origin===state.origin||r.destination===state.origin)&&(!code||r.origin===code||r.destination===code)).sort((a,b)=>a.month.localeCompare(b.month)||a.origin.localeCompare(b.origin)||a.destination.localeCompare(b.destination)||b.success-a.success||a.weekday-b.weekday);
  for(const entry of records){
   const tr=node('tr',entry.kind==='REVIEW'?'repeat-review-row':'repeat-excluded-row');tr.dataset.result=entry.kind;tr.dataset.month=entry.month;tr.dataset.origin=entry.origin;tr.dataset.destination=entry.destination;tr.dataset.weekday=String(entry.weekday);
   const reason=(entry.referenceMonth?monthLabel(entry.referenceMonth)+' 참고 · ':'')+(entry.kind==='REVIEW'?entry.issues.map(i=>Number(i.date.slice(8))+'일 '+i.reason).join(', '):entry.dates.map(d=>Number(d.slice(8))+'일').join(', ')+' 모두 일치');
@@ -131,7 +131,7 @@ function downloadRepeatDecisions(event){
 }
 function updateView(){stats();renderRoutes();renderCalendar();}
 function renderTimetableSummary(route){
- const target=$('timetable-summary');target.replaceChildren();target.hidden=state.carrier!=='KE'||!route||isExtendedKeRoute(route);if(target.hidden)return;const origin=state.direction==='out'?state.origin:route.code,destination=state.direction==='out'?route.code:state.origin,rows=timetableRouteSummary(timetableIndex,origin,destination,state.month).map(r=>({...r,displayStart:r.displayStart<state.start?state.start:r.displayStart,displayEnd:r.displayEnd>state.end?state.end:!isExtendedKeRoute(route)&&r.displayEnd>KE_DISPLAY_END?KE_DISPLAY_END:r.displayEnd})).filter(r=>r.displayStart<=r.displayEnd);target.append(node('strong','','운항요일 참고'));
+ const target=$('timetable-summary');target.replaceChildren();target.hidden=state.carrier!=='KE'||!route||isExtendedKeRoute(route)||state.month<=KE_DISPLAY_END.slice(0,7);if(target.hidden)return;const origin=state.direction==='out'?state.origin:route.code,destination=state.direction==='out'?route.code:state.origin,rows=timetableRouteSummary(timetableIndex,origin,destination,state.month).map(r=>({...r,displayStart:r.displayStart<state.start?state.start:r.displayStart,displayEnd:r.displayEnd>state.end?state.end:!isExtendedKeRoute(route)&&r.displayEnd>KE_DISPLAY_END?KE_DISPLAY_END:r.displayEnd})).filter(r=>r.displayStart<=r.displayEnd);target.append(node('strong','','운항요일 참고'));
  if(!rows.length){target.append(node('p','',timetableWarning?'운항요일 참고표 연결 미확인':'이 방향·월의 운항요일 참고 자료는 미확인입니다.'));return;}
  for(const r of rows){const period=r.displayStart.slice(5)+'~'+r.displayEnd.slice(5),basis=r.coverage==='WEEKDAYS'?(r.weekdayText?'운항 '+r.weekdayText:'운항 요일 미확인')+(r.noFlightText?' · 비운항 '+r.noFlightText:''):r.coverage==='DATES_ONLY'?'날짜별 일부 확인 · 나머지 미확인':'출처 간 불일치 · 미확인';target.append(node('p','timetable-summary-row',`${r.serviceKind==='DIRECT'?'직접운항':'공동운항'} · ${r.operatorName} · ${period} · ${basis}`));}
  target.append(node('p','timetable-caption',`${rows[0].sourceAsOf} 기준 참고표입니다. 좌석 표식은 항공편별 공식 조회 결과와 별도로 대조합니다.`));
