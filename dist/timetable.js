@@ -20,7 +20,7 @@ export function validateTimetableReference(value){
 export function buildTimetableIndex(value){
  const reference=validateTimetableReference(value),routes=new Map();for(const r of reference.records){const key=r.origin+':'+r.destination;if(!routes.has(key))routes.set(key,[]);routes.get(key).push(r);}return {reference,routes};
 }
-function referenceStatus(row,date){
+export function referenceStatus(row,date){
  if(date<row.start||date>row.end||row.coverage==='UNRESOLVED')return 'UNKNOWN';
  if(row.confirmedDates.includes(date))return 'OPERATING';
  if(row.coverage==='DATES_ONLY')return 'UNKNOWN';
