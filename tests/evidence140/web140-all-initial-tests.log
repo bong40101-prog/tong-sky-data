@@ -1,0 +1,363 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> tongsky-calendar@1.0.0 test
+> node --test tests/*.test.mjs
+
+✔ startup plans exactly the app shared dataset: eight Korean Air regions and one Asiana document (1.415454ms)
+✔ progress reaches all-complete only after both airlines finish and every URL is read-only (14.648588ms)
+✔ HTTP denials are not retried and cannot report 100 percent loaded (1.177324ms)
+✔ one damaged region leaves verified regions intact while reporting a partial load (64.219787ms)
+✔ abort stops new work and retains a non-complete progress state (0.903889ms)
+✔ invalid airport and unexpected region paths are rejected before requesting data (1.033676ms)
+✔ refresh fallback retains only failed source regions and never revives successfully emptied regions (0.223198ms)
+✔ aborted loading identifies regions that were never started as unavailable (0.33688ms)
+✔ KE schema2 data uses v102 while OZ remains on the compatible v101 namespace (0.537474ms)
+✔ KE cap is inclusive December17; direct late-day access reveals no record or badges (2.81181ms)
+✔ KE totals and nearest date obey cap even with a forged future requested end (0.621031ms)
+✔ future-only KE route is not listed as saved or marked in a forged long filter (0.54165ms)
+✔ display projection clips KE cached dates and months without mutating source or history (1.660245ms)
+✔ Asiana future months totals and visible dates remain unchanged (0.595673ms)
+✔ every catalog airport has a country or territory, with identical metadata across airlines (2.192041ms)
+✔ European countries and Northeast Asian countries cannot leak into each other (0.536042ms)
+✔ Japan airport choices exclude Chinese airports and the selected origin (0.256559ms)
+✔ country filtering uses ISO code rather than approximate city-name matching (1.581987ms)
+✔ airport selection is exact and cannot override a different country or continent (0.302909ms)
+✔ Hong Kong Macau and Taiwan remain separately selectable geographic categories (0.359775ms)
+✔ actual shared Korean Air and Asiana gzip documents retain original clocks and isolated carriers (11.514786ms)
+✔ wrong origin, region and schema cannot produce calendar data (0.188826ms)
+✔ route key mismatch and duplicate calendar days are rejected (0.44249ms)
+✔ missing dates and nonboolean seat fields never become no-seat results (0.424133ms)
+✔ a future success clock and a clock preceding observation are rejected (0.189597ms)
+✔ Korean midnight uses Korea date regardless of UTC date (10.730598ms)
+✔ unknown and no-flight days do not count as availability even if a stale marker exists (0.3042ms)
+✔ only actually saved routes are grouped, and both directions retain independent monthly records (0.70618ms)
+✔ city, region, dates and cabin filtering agree with the underlying saved day markers (0.830969ms)
+✔ newer duplicate records win without merging seat data from another observation (0.314587ms)
+✔ malformed and oversized compressed data fail before any records are rendered (15.9795ms)
+✔ calendar boundaries reject impossible dates and advance across years correctly (0.714422ms)
+✔ type counts include overlapping types separately and both directions, within the selected range (1.449356ms)
+✔ unknown and no-flight stale flags never count, and no observations are distinguishable from an observed zero (1.211085ms)
+✔ Asiana supports only business award and upgrade counts even with a stale first flag (0.362359ms)
+✔ seat filtering changes matching dates without hiding the other category counts (0.233544ms)
+✔ captured complete operator week proves KE901 Sunday off and KE5901 Air France Sunday on (20.702185ms)
+✔ real own-off partner-on case retains codeshare economy and removes only direct prestige and upgrade flags (4.721043ms)
+✔ combined calendar and totals use validated flight-level OR, not stale daily aggregate markers (4.306925ms)
+✔ direct-on partner-off preserves only direct flight badges (3.764603ms)
+✔ both actual operators running remain together in one combined day (4.114374ms)
+✔ global no-flight requires complete all-operator off proof and no unresolved raw flight (3.321953ms)
+✔ partner-only complete schedule is valid without an own flight row (2.921876ms)
+✔ unknown raw flight never borrows a known flight merely because departure times match (2.982489ms)
+✔ known positive partner plus unmatched raw flight stays partially observed with only verified partner flags (4.233554ms)
+✔ unknown raw flight prevents global no-flight even when every listed operator is off (2.198361ms)
+✔ unique exact flight number survives a displayed departure time change, retaining the raw time in audit (1.233328ms)
+✔ multiple exact number candidates are disambiguated by exact departure time (2.243259ms)
+✔ same number and time across operators stays unknown unless raw named operator disambiguates it (4.102476ms)
+✔ many raw observations mapping to one changed-time flight remain unknown instead of last-row-wins (0.903619ms)
+✔ explicit observed no-marks is an observed zero while unknown detail is not (2.811209ms)
+✔ legacy daily aggregate and own-only v1 proof never authenticate all operators or global nonoperation (2.154995ms)
+✔ modern flight detail without schema2 all-operator proof remains pending, including partner rows (1.083441ms)
+✔ raw cache remains intact and later valid proof restores positive views (1.389285ms)
+✔ failed-region fallback is rejoined to current flight proof before calendar display (1.138865ms)
+✔ schema2 persisted claims are independently recomputed from raw observations and proof (6.977521ms)
+✔ tampered per-flight operator, operation status, flags and missing raw audit are rejected (4.559508ms)
+✔ model record ingestion rejects tampered schema2 aggregate rather than trusting already-derived flags (6.243118ms)
+✔ FRA user weekdays apply to direct rows only; operating partner information remains on Tuesday (1.276504ms)
+✔ FRA direct Wednesday observation and reverse-direction partner are independently retained (3.335954ms)
+✔ FRA allowed Sunday never revives an explicitly nonoperating direct flight (0.921176ms)
+✔ policy failure hides badges without rewriting actual flight operation facts; OZ is unchanged (0.915427ms)
+✔ invalid all-operator evidence rejected: partial operator proof (0.264551ms)
+✔ invalid all-operator evidence rejected: missing day (0.261937ms)
+✔ invalid all-operator evidence rejected: duplicate day (0.386486ms)
+✔ invalid all-operator evidence rejected: wrong own count (0.252763ms)
+✔ invalid all-operator evidence rejected: wrong partner count (0.189948ms)
+✔ invalid all-operator evidence rejected: missing partner row on a date (2.676445ms)
+✔ invalid all-operator evidence rejected: wrong service kind (0.361097ms)
+✔ invalid all-operator evidence rejected: operator code-name conflict (0.208706ms)
+✔ invalid all-operator evidence rejected: unknown operator label (0.254646ms)
+✔ invalid all-operator evidence rejected: invalid time (0.201696ms)
+✔ invalid all-operator evidence rejected: duplicate flight identity (0.834785ms)
+✔ invalid all-operator evidence rejected: inconsistent day summary (0.354417ms)
+✔ invalid all-operator evidence rejected: operator identity changes during week (0.17161ms)
+✔ invalid all-operator evidence rejected: wrong query week (0.132872ms)
+✔ invalid all-operator evidence rejected: insecure source (0.246233ms)
+✔ invalid all-operator evidence rejected: wrong official page (0.149477ms)
+✔ invalid all-operator evidence rejected: untrusted domain (1.129051ms)
+✔ invalid all-operator evidence rejected: source credentials (0.156857ms)
+✔ invalid all-operator evidence rejected: future clock (0.16468ms)
+✔ same-clock conflicting full-operator proof rejects instead of arbitrarily choosing a schedule (0.681021ms)
+✔ newer complete operator proof supersedes earlier operator-specific state (1.141549ms)
+✔ invalid flight seat capture is withheld: wrong detail date (0.760692ms)
+✔ invalid flight seat capture is withheld: missing detail time (2.245963ms)
+✔ invalid flight seat capture is withheld: duplicate raw row (0.800433ms)
+✔ invalid flight seat capture is withheld: nonboolean flag (2.115966ms)
+✔ invalid flight seat capture is withheld: raw aggregate contradiction (1.502076ms)
+✔ operation policy fetch is read-only, bounded and not retried after denial (4.083526ms)
+✔ exact native-derived persisted snapshot passes independent web ingestion with partner economy preserved (26.722727ms)
+✔ explicit no-seat flight marker is retained as raw audit and never implies a nonoperating flight (1.22093ms)
+✔ no-seat marker with contradictory positive seats is withheld instead of becoming availability (1.867709ms)
+✔ captured zero flight plus another uncaptured operating flight stays unknown rather than an observed zero (6.322348ms)
+✔ canonical leading-zero marketing numbers join by identity while raw spelling remains preserved (2.781689ms)
+✔ known English operator aliases stay compatible with native proof without inferring service from KE prefix (1.619644ms)
+✔ actual supplied reference validates and partial exact dates never extrapolate weekday metadata (89.403747ms)
+✔ bounds include both ends and never extrapolate to adjacent months (4.080161ms)
+✔ missing weekday is unknown unless explicitly listed as nonoperating (5.59705ms)
+✔ exact-date partial coverage ignores advertised weekly pattern (0.596604ms)
+✔ unresolved reference retains date audit but never asserts operation (0.222888ms)
+✔ operator route union keeps explicit on with another unknown rule; off plus unknown stays unknown (0.328247ms)
+✔ lookup is directional and never guesses a reversed route (3.483077ms)
+✔ codeshare nonoperation reference conflicts only that operator row and keeps direct award (1.129271ms)
+✔ direct nonoperation reference keeps the operating codeshare row and flags (0.426396ms)
+✔ all positive rows withheld by a reference conflict become unknown, never a false observed zero or no-flight (0.504564ms)
+✔ independently verified off flight stays off when the reference says on (0.267034ms)
+✔ wrong operator and unknown actual operator never borrow a nonoperation rule (0.874615ms)
+✔ reference only annotates a pending day, inventing no flight row, operation proof or seat flag (0.215947ms)
+✔ asiana and missing-reference records pass through unchanged (0.408519ms)
+✔ monthly summary is clipped to the applicable interval and preserves partial coverage (0.353405ms)
+✔ invalid reference rejected: claimed full operators (0.321487ms)
+✔ invalid reference rejected: wrong source kind (0.085149ms)
+✔ invalid reference rejected: bad root range (0.076866ms)
+✔ invalid reference rejected: reversed row range (3.813808ms)
+✔ invalid reference rejected: out-of-bounds row (0.108053ms)
+✔ invalid reference rejected: overlapping on/off weekday (0.08611ms)
+✔ invalid reference rejected: invalid weekday (0.445785ms)
+✔ invalid reference rejected: codeshare classified direct (0.088004ms)
+✔ invalid reference rejected: exact date outside bounds (0.115124ms)
+✔ invalid reference rejected: partial negative extrapolation (0.690957ms)
+✔ invalid reference rejected: insecure source (0.562672ms)
+✔ reference loader uses one bounded read-only fetch and does not retry failure (4.540034ms)
+✔ entry keeps main hidden until both airlines complete, then shows real 100-percent progress (480.596674ms)
+✔ partial startup error waits for explicit continue and never invents a full load (283.515108ms)
+✔ manual startup retry loads both airlines once more and recovers the normal main screen (262.646324ms)
+✔ airline tabs use preloaded isolated data and update seat options without another request (364.800418ms)
+✔ city search, direction and monthly calendar controls reflect the selected actual route (302.735377ms)
+✔ invalid date ranges do not alter results or fetch new data (203.603046ms)
+✔ refresh after changing origin makes exactly one region-read batch (301.086761ms)
+✔ top-right series download links to the existing series homepage, with no write or collector UI (208.42009ms)
+✔ official nonflight mask agrees in calendar, current totals, direction totals and day details (146.379046ms)
+✔ a newly loaded policy also filters retained data after the seat document refresh fails (313.531026ms)
+✔ unavailable independent policy hides unverified Korean Air positives and warns explicitly (145.475604ms)
+✔ empty operating policy renders KE data as pending with no available badges or false zero-seat counts (147.21069ms)
+✔ a policy refresh failure removes formerly verified KE positive badges instead of retaining stale positive views (176.727203ms)
+✖ optional timetable failure does not block startup or erase independent verified flight badges (130.182643ms)
+✖ bounded timetable conflict hides only the direct row and explains the mismatch while keeping codeshare details (128.378123ms)
+✖ partial timetable summary and unlisted date remain explicitly unknown and reverse direction cannot borrow it (112.314065ms)
+✖ reference-only nonoperation remains separate from a pending calendar and creates no invented flight identity (119.624461ms)
+✖ real operator-off partner-on case stays combined while day details show both services and only valid seat badges (113.254698ms)
+✖ FRA direct weekday exclusion keeps operating codeshare prestige in calendar and the separate flight section (119.978352ms)
+✔ legacy aggregate-only data stays pending even when an own-flight-only v1 week exists (113.085956ms)
+✖ an explicitly empty seat row remains an operating codeshare with no seat badges (133.567949ms)
+✔ region country and airport selectors cascade, and France shows only its actual saved route (247.796275ms)
+✔ changing continent clears stale country and airport, then Japan lists its airports only (266.987607ms)
+✔ airline changes clear unsupported country and airport while keeping supported continent selection (269.174163ms)
+✔ a country without saved records has an explicit no-data state rather than a no-seat result (212.237207ms)
+✔ route cards label and count every Korean Air type as dates instead of an ambiguous total (220.037276ms)
+✔ calendar uses readable type chips and month-direction counts that change with direction (272.017066ms)
+✔ Asiana cards and month counts show business award and upgrade without first (234.400564ms)
+✔ fully unknown saved route displays unconfirmed rather than zero available dates (287.806574ms)
+✖ Rome regression: every displayed monthly and directional count equals its actual calendar markers (226.01616ms)
+✖ month arrows and seat filters update list, matching routes and calendar together (226.151989ms)
+✔ partial date ranges hide out-of-range markers and use the same clipped counts everywhere (324.737327ms)
+✖ Rome shows full-period outbound and inbound totals separately while monthly calendar counts still match (209.463548ms)
+✖ a missing inbound direction stays unconfirmed without erasing verified outbound totals (207.930464ms)
+✔ Asiana full-period columns count business award and upgrade independently in both directions (238.199537ms)
+✔ refresh failure retains previously verified route calendars instead of clearing them (327.195797ms)
+✔ temporary KE cap defaults to December17 and clamps a remembered Asiana future month on return (325.824806ms)
+✔ temporary KE calendar includes December17 and contains no December18 or later date cells even after a forged future month choice (205.114284ms)
+✔ temporary KE form accepts December17 and rejects December18 without altering visible totals while Asiana keeps359 (246.195287ms)
+✔ temporary KE homepage notice replaces the prior360 expansion announcement and explains hidden later dates (194.198501ms)
+✔ daily visitor footer renders the server count and sends no client IP or browser ID (84.222111ms)
+✔ Korea midnight timer registers the new day and replaces the displayed daily count (10.291047ms)
+✔ failed or malformed analytics stays unavailable and never fabricates zero (19.562192ms)
+ℹ tests 165
+ℹ suites 0
+ℹ pass 154
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9582.513274
+
+✖ failing tests:
+
+test at tests/ui.test.mjs:58:1
+✖ optional timetable failure does not block startup or erase independent verified flight badges (130.182643ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(p.d.querySelectorAll('[data-date="2027-02-15"] .day-type').length>0)
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:58:362)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/ui.test.mjs:59:1
+✖ bounded timetable conflict hides only the direct row and explains the mismatch while keeping codeshare details (128.378123ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /직접운항 · 대한항공 · 02-15~02-21/. Input:
+  
+  '운항요일 참고이 방향·월의 운항요일 참고 자료는 미확인입니다.'
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:59:390)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '운항요일 참고이 방향·월의 운항요일 참고 자료는 미확인입니다.',
+    expected: /직접운항 · 대한항공 · 02-15~02-21/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/ui.test.mjs:60:1
+✖ partial timetable summary and unlisted date remain explicitly unknown and reverse direction cannot borrow it (112.314065ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /날짜별 일부 확인 · 나머지 미확인/. Input:
+  
+  '운항요일 참고이 방향·월의 운항요일 참고 자료는 미확인입니다.'
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:60:392)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '운항요일 참고이 방향·월의 운항요일 참고 자료는 미확인입니다.',
+    expected: /날짜별 일부 확인 · 나머지 미확인/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/ui.test.mjs:61:1
+✖ reference-only nonoperation remains separate from a pending calendar and creates no invented flight identity (119.624461ms)
+  TypeError [Error]: Cannot read properties of null (reading 'classList')
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:61:393)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at tests/ui.test.mjs:62:1
+✖ real operator-off partner-on case stays combined while day details show both services and only valid seat badges (113.254698ms)
+  TypeError [Error]: Cannot read properties of null (reading 'querySelectorAll')
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:63:208)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at tests/ui.test.mjs:65:1
+✖ FRA direct weekday exclusion keeps operating codeshare prestige in calendar and the separate flight section (119.978352ms)
+  TypeError [Error]: Cannot read properties of null (reading 'querySelectorAll')
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:66:272)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at tests/ui.test.mjs:71:1
+✖ an explicitly empty seat row remains an operating codeshare with no seat badges (133.567949ms)
+  TypeError [Error]: Cannot read properties of null (reading 'click')
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:72:212)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at tests/ui.test.mjs:124:1
+✖ Rome regression: every displayed monthly and directional count equals its actual calendar markers (226.01616ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1일' !== '9일'
+  
+      at assertCountsMatchCells (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:118:10)
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:127:129)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1일',
+    expected: '9일',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/ui.test.mjs:130:1
+✖ month arrows and seat filters update list, matching routes and calendar together (226.151989ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1일' !== '9일'
+  
+      at assertCountsMatchCells (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:118:10)
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:133:176)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1일',
+    expected: '9일',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/ui.test.mjs:146:1
+✖ Rome shows full-period outbound and inbound totals separately while monthly calendar counts still match (209.463548ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+      firstCombined: {
+        back: '0일',
+        out: '0일'
+      },
+      prestigeAward: {
+  +     back: '1일',
+  +     out: '1일'
+  -     back: '9일',
+  -     out: '9일'
+      },
+      prestigeUpgrade: {
+  +     back: '4일',
+  +     out: '2일'
+  -     back: '12일',
+  -     out: '10일'
+      }
+    }
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:149:9)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { prestigeAward: { out: '1일', back: '1일' }, prestigeUpgrade: { out: '2일', back: '4일' }, firstCombined: { out: '0일', back: '0일' } },
+    expected: { prestigeAward: { out: '9일', back: '9일' }, prestigeUpgrade: { out: '10일', back: '12일' }, firstCombined: { out: '0일', back: '0일' } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/ui.test.mjs:157:1
+✖ a missing inbound direction stays unconfirmed without erasing verified outbound totals (207.930464ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+      firstCombined: {
+        back: '미확인',
+        out: '0일'
+      },
+      prestigeAward: {
+        back: '미확인',
+  +     out: '1일'
+  -     out: '9일'
+      },
+      prestigeUpgrade: {
+        back: '미확인',
+  +     out: '2일'
+  -     out: '10일'
+      }
+    }
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/8efe7731e698/web-tong-sky-140/tests/ui.test.mjs:159:92)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { prestigeAward: { out: '1일', back: '미확인' }, prestigeUpgrade: { out: '2일', back: '미확인' }, firstCombined: { out: '0일', back: '미확인' } },
+    expected: { prestigeAward: { out: '9일', back: '미확인' }, prestigeUpgrade: { out: '10일', back: '미확인' }, firstCombined: { out: '0일', back: '미확인' } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

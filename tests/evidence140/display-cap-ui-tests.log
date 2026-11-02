@@ -1,0 +1,12 @@
+✔ temporary KE cap defaults to December17 and clamps a remembered Asiana future month on return (676.642639ms)
+✔ temporary KE calendar includes December17 and contains no December18 or later date cells even after a forged future month choice (295.169241ms)
+✔ temporary KE form accepts December17 and rejects December18 without altering visible totals while Asiana keeps359 (292.153581ms)
+✔ temporary KE homepage notice replaces the prior360 expansion announcement and explains hidden later dates (263.724351ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1930.394735

@@ -1,0 +1,44 @@
+✔ startup plans exactly the app shared dataset: eight Korean Air regions and one Asiana document (1.679491ms)
+✔ progress reaches all-complete only after both airlines finish and every URL is read-only (9.830366ms)
+✔ HTTP denials are not retried and cannot report 100 percent loaded (0.797739ms)
+✔ one damaged region leaves verified regions intact while reporting a partial load (52.484681ms)
+✔ abort stops new work and retains a non-complete progress state (0.543583ms)
+✔ invalid airport and unexpected region paths are rejected before requesting data (0.785391ms)
+✔ refresh fallback retains only failed source regions and never revives successfully emptied regions (0.19631ms)
+✔ aborted loading identifies regions that were never started as unavailable (0.376146ms)
+✔ KE schema2 data uses v102 while OZ remains on the compatible v101 namespace (0.664001ms)
+✔ KE cap is inclusive December17; direct late-day access reveals no record or badges (2.727631ms)
+✔ KE totals and nearest date obey cap even with a forged future requested end (0.428924ms)
+✔ future-only KE route is not listed as saved or marked in a forged long filter (0.263449ms)
+✔ display projection clips KE cached dates and months without mutating source or history (1.152964ms)
+✔ Asiana future months totals and visible dates remain unchanged (0.231302ms)
+✔ every catalog airport has a country or territory, with identical metadata across airlines (1.926396ms)
+✔ European countries and Northeast Asian countries cannot leak into each other (0.5076ms)
+✔ Japan airport choices exclude Chinese airports and the selected origin (0.317439ms)
+✔ country filtering uses ISO code rather than approximate city-name matching (4.762808ms)
+✔ airport selection is exact and cannot override a different country or continent (0.327173ms)
+✔ Hong Kong Macau and Taiwan remain separately selectable geographic categories (0.690981ms)
+✔ actual shared Korean Air and Asiana gzip documents retain original clocks and isolated carriers (14.259891ms)
+✔ wrong origin, region and schema cannot produce calendar data (0.340573ms)
+✔ route key mismatch and duplicate calendar days are rejected (0.47382ms)
+✔ missing dates and nonboolean seat fields never become no-seat results (0.435664ms)
+✔ a future success clock and a clock preceding observation are rejected (0.222148ms)
+✔ Korean midnight uses Korea date regardless of UTC date (7.197806ms)
+✔ unknown and no-flight days do not count as availability even if a stale marker exists (0.603722ms)
+✔ only actually saved routes are grouped, and both directions retain independent monthly records (0.540809ms)
+✔ city, region, dates and cabin filtering agree with the underlying saved day markers (1.263031ms)
+✔ newer duplicate records win without merging seat data from another observation (0.274045ms)
+✔ malformed and oversized compressed data fail before any records are rendered (8.330535ms)
+✔ calendar boundaries reject impossible dates and advance across years correctly (0.35221ms)
+✔ type counts include overlapping types separately and both directions, within the selected range (0.918857ms)
+✔ unknown and no-flight stale flags never count, and no observations are distinguishable from an observed zero (0.426621ms)
+✔ Asiana supports only business award and upgrade counts even with a stale first flag (0.158674ms)
+✔ seat filtering changes matching dates without hiding the other category counts (0.313293ms)
+ℹ tests 36
+ℹ suites 0
+ℹ pass 36
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 232.370786

@@ -1,11 +1,11 @@
-import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor} from './model.js?v=139';
-import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=139';
-import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=139';
-import {loadTimetableReference,projectTimetableRecords,timetableRouteSummary,lookupTimetableDay} from './timetable.js?v=139';
+import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords} from './model.js?v=140';
+import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=140';
+import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=140';
+import {loadTimetableReference,projectTimetableRecords,timetableRouteSummary,lookupTimetableDay} from './timetable.js?v=140';
 const $=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const today=todayKST();
-const state={carrier:'KE',origin:'ICN',region:'전체',country:'전체',airport:'전체',query:'',seat:'all',start:today,end:addDays(today,360),month:today.slice(0,7),direction:'out',selected:null,records:[],routes:[],filtered:[],loading:false};
+const state={carrier:'KE',origin:'ICN',region:'전체',country:'전체',airport:'전체',query:'',seat:'all',start:today,end:KE_DISPLAY_END,month:today.slice(0,7),direction:'out',selected:null,records:[],routes:[],filtered:[],loading:false};
 let catalogs,controller,generation=0,bootAttempt=0,operationPolicy={schema:1,weeks:[]},operationWarning='';const cache=new Map();
 let timetableIndex=null,timetableWarning='';
 async function readTimetable(force,signal){const own=new AbortController(),abort=()=>own.abort(signal.reason);if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});const timer=setTimeout(()=>own.abort(new Error('참고표 연결 시간 초과')),6000);try{return {index:await loadTimetableReference({force,signal:own.signal}),warning:''};}catch{return {index:null,warning:'운항요일 참고표를 불러오지 못했습니다. 저장 좌석 자료와 기존 운항 대조 결과는 유지합니다.'};}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}}
@@ -35,7 +35,7 @@ function setGeographyOptions(){
  if(state.airport!=='전체'&&!cities.some(c=>c.code===state.airport))state.airport='전체';
  destination.replaceChildren(new Option('전체 도시·공항','전체'));for(const city of cities)destination.add(new Option(city.name+' · '+city.code,city.code));destination.value=state.airport;
 }
-function bookingEnd(){return addDays(today,state.carrier==='KE'?360:359);}
+function bookingEnd(){return state.carrier==='KE'?KE_DISPLAY_END:addDays(today,359);}
 function setDateLimits(){for(const id of ['start','end']){$(id).min=today;$(id).max=bookingEnd();}}
 function setMonths(){const select=$('month');select.replaceChildren();for(let month=state.start.slice(0,7);month<=state.end.slice(0,7);month=monthStep(month,1))select.add(new Option(monthLabel(month),month));if(state.month<state.start.slice(0,7)||state.month>state.end.slice(0,7))state.month=state.start.slice(0,7);select.value=state.month;}
 function periodFilter(){return {...state,month:undefined,direction:undefined};}
@@ -77,6 +77,7 @@ function renderRoutes(){
  const bottom=node('div','route-row route-meta');bottom.append(node('span','',route.country||route.region.split('/')[0]),node('span','',route.totalSummary.nearest?`가장 가까운 날 ${displayDate(route.totalSummary.nearest)}`:`저장 ${route.totalSummary.months}개 노선·월`));const current=node('div','route-current-calendar');current.append(node('p','current-calendar-heading',`현재 달력 · ${Number(state.month.slice(5))}월 · ${state.direction==='out'?'가는 편':'오는 편'}`),typeCounts(route.summary,'route-type-counts',true));b.append(top,middle,periodTotals(route),current,bottom);b.addEventListener('click',()=>{state.selected=route.code;renderRoutes();renderCalendar();});list.append(b);}
 }
 function renderCalendar(){
+ if(state.carrier==='KE'&&state.month>KE_DISPLAY_END.slice(0,7))state.month=KE_DISPLAY_END.slice(0,7);
  const route=currentRoute(),grid=$('calendar-grid');grid.replaceChildren();$('month').value=state.month;$('prev-month').disabled=state.month<=state.start.slice(0,7);$('next-month').disabled=state.month>=state.end.slice(0,7);
  for(const button of $('directions').querySelectorAll('button')){const active=button.dataset.direction===state.direction;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));}
  $('calendar-region').textContent=route?`${route.region.split('/')[0]}${route.country?' · '+route.country:''} · ${AIRLINES[state.carrier].name}`:'SAVED CALENDAR';$('calendar-title').textContent=route?route.name:state.loading?'저장된 달력을 불러오는 중':'노선을 선택해 주세요';
@@ -86,7 +87,7 @@ function renderCalendar(){
  const summary=summarize(route??{legs:{}},state);$('calendar-counts').replaceChildren(typeCounts(summary,'month-type-counts'));
  $('calendar-count-scope').textContent=`${monthLabel(state.month)} · ${state.direction==='out'?'가는 편':'오는 편'} · 선택 기간 안의 표식 날짜 수`;
  const offset=new Date(state.month+'-01T00:00:00Z').getUTCDay();for(let i=0;i<offset;i++){const blank=node('div','day-blank');blank.setAttribute('aria-hidden','true');grid.append(blank);}
- for(let day=1;day<=daysInMonth(state.month);day++){const date=`${state.month}-${String(day).padStart(2,'0')}`,inRange=date>=state.start&&date<=state.end,info=inRange?cellInfo(route,state.direction,date,state.carrier,state.seat):{kind:'outside',label:'선택 기간 밖',marks:[]},button=node('button','day day-'+info.kind),weekday=(offset+day-1)%7;button.type='button';button.dataset.date=date;
+ for(let day=1;day<=(state.carrier==='KE'&&state.month===KE_DISPLAY_END.slice(0,7)?Number(KE_DISPLAY_END.slice(8)):daysInMonth(state.month));day++){const date=`${state.month}-${String(day).padStart(2,'0')}`,inRange=date>=state.start&&date<=state.end,info=inRange?cellInfo(route,state.direction,date,state.carrier,state.seat):{kind:'outside',label:'선택 기간 밖',marks:[]},button=node('button','day day-'+info.kind),weekday=(offset+day-1)%7;button.type='button';button.dataset.date=date;
  if(weekday===0)button.classList.add('sunday');if(weekday===6)button.classList.add('saturday');if(date===today)button.classList.add('today');button.disabled=!route||!inRange;button.setAttribute('aria-label',`${date} · ${info.label}${date===today?' · 오늘':''}`);
  button.append(node('span','day-number',String(day)));const marks=node('span','day-marks');for(const mark of info.marks){const chip=node('span','day-type day-type-'+mark.index,['보너스','승급','퍼스트'][mark.index]);chip.title=mark.label;chip.setAttribute('aria-hidden','true');marks.append(chip);}if(info.kind==='unknown')marks.append(node('span','day-unknown',info.day?.timetableConflict?'일정 불일치':info.day?.routeWeekdayExcluded?'비운항':info.day?.operationPending?'운항 대조 전':'—'));if(info.kind==='noflight')marks.append(node('span','day-no-flight','비운항'));if(!inRange)marks.append(node('span','day-outside-note','기간 밖'));button.append(marks);button.addEventListener('click',()=>openDay(date,info));grid.append(button);}
  const badge=$('fresh-badge');badge.hidden=!record;
@@ -95,7 +96,7 @@ function renderCalendar(){
 }
 function updateView(){stats();renderRoutes();renderCalendar();}
 function renderTimetableSummary(route){
- const target=$('timetable-summary');target.replaceChildren();target.hidden=state.carrier!=='KE'||!route;if(target.hidden)return;const origin=state.direction==='out'?state.origin:route.code,destination=state.direction==='out'?route.code:state.origin,rows=timetableRouteSummary(timetableIndex,origin,destination,state.month);target.append(node('strong','','운항요일 참고'));
+ const target=$('timetable-summary');target.replaceChildren();target.hidden=state.carrier!=='KE'||!route;if(target.hidden)return;const origin=state.direction==='out'?state.origin:route.code,destination=state.direction==='out'?route.code:state.origin,rows=timetableRouteSummary(timetableIndex,origin,destination,state.month).map(r=>({...r,displayStart:r.displayStart<state.start?state.start:r.displayStart,displayEnd:r.displayEnd>state.end?state.end:r.displayEnd>KE_DISPLAY_END?KE_DISPLAY_END:r.displayEnd})).filter(r=>r.displayStart<=r.displayEnd);target.append(node('strong','','운항요일 참고'));
  if(!rows.length){target.append(node('p','',timetableWarning?'운항요일 참고표 연결 미확인':'이 방향·월의 운항요일 참고 자료는 미확인입니다.'));return;}
  for(const r of rows){const period=r.displayStart.slice(5)+'~'+r.displayEnd.slice(5),basis=r.coverage==='WEEKDAYS'?(r.weekdayText?'운항 '+r.weekdayText:'운항 요일 미확인')+(r.noFlightText?' · 비운항 '+r.noFlightText:''):r.coverage==='DATES_ONLY'?'날짜별 일부 확인 · 나머지 미확인':'출처 간 불일치 · 미확인';target.append(node('p','timetable-summary-row',`${r.serviceKind==='DIRECT'?'직접운항':'공동운항'} · ${r.operatorName} · ${period} · ${basis}`));}
  target.append(node('p','timetable-caption',`${rows[0].sourceAsOf} 기준 참고표입니다. 좌석 표식은 항공편별 공식 조회 결과와 별도로 대조합니다.`));
@@ -120,7 +121,7 @@ function openDay(date,info){
  flightDetails(info,markers);timetableDayDetails(date,info,markers);$('day-times').replaceChildren();if(info.record){$('day-times').append(node('p','',`항공사 기준 ${fullTime.format(new Date(info.record.sourceUpdatedAt))}`),node('p','',`실제 수집 ${fullTime.format(info.record.success)}`));}else $('day-times').append(node('p','','저장된 수집 시각 없음'));
  $('day-dialog').showModal();
 }
-function finishData(records,errors){const masked=applyOperationPolicy(records,operationPolicy,{forcePending:Boolean(operationWarning)});state.records=projectTimetableRecords(masked.records,timetableIndex);state.routes=makeRoutes(state.records,catalogs[state.carrier],state.origin);state.loading=false;$('refresh').disabled=false;status(state.records.length?`저장 ${state.records.length}개 노선·월 연결됨`:'저장된 자료 없음',state.records.length?'ready':'');message([errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 새 자료 불러오기로 다시 확인할 수 있습니다.':'',operationWarning,timetableWarning,state.carrier==='KE'?'대한항공 직접 운항·공동운항편을 함께 표시합니다. 항공편별 운항이 확인된 표식만 합산하며, 재수집 전 자료는 확인 중입니다. 인천↔프랑크푸르트: 직접 운항편 수·금·일 출발 기준 (사용자 지정)'+(masked.pendingDays?' 운항 대조 전 '+masked.pendingDays+'개 노선·날짜':''):'',masked.warnings.length?'운항 대조 자료가 올바르지 않은 일부 저장 결과는 표시에서 제외했습니다.':''].filter(Boolean).join(' '));stats();renderRoutes();renderCalendar();}
+function finishData(records,errors){const masked=applyOperationPolicy(records,operationPolicy,{forcePending:Boolean(operationWarning)});state.records=limitDisplayRecords(projectTimetableRecords(masked.records,timetableIndex));state.routes=makeRoutes(state.records,catalogs[state.carrier],state.origin);state.loading=false;$('refresh').disabled=false;status(state.records.length?`저장 ${state.records.length}개 노선·월 연결됨`:'저장된 자료 없음',state.records.length?'ready':'');message([errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 새 자료 불러오기로 다시 확인할 수 있습니다.':'',operationWarning,timetableWarning,state.carrier==='KE'?'대한항공 직접 운항·공동운항편을 함께 표시합니다. 항공편별 운항이 확인된 표식만 합산하며, 재수집 전 자료는 확인 중입니다. 인천↔프랑크푸르트: 직접 운항편 수·금·일 출발 기준 (사용자 지정)'+(masked.pendingDays?' 운항 대조 전 '+masked.pendingDays+'개 노선·날짜':''):'',masked.warnings.length?'운항 대조 자료가 올바르지 않은 일부 저장 결과는 표시에서 제외했습니다.':''].filter(Boolean).join(' '));stats();renderRoutes();renderCalendar();}
 async function loadData(force=false){
  const id=++generation;controller?.abort();controller=new AbortController();const own=controller,carrier=state.carrier,origin=state.origin,key=`${carrier}:${origin}`;state.loading=true;state.selected=null;state.records=[];state.routes=[];message('');status('저장 자료 불러오는 중');$('refresh').disabled=true;stats();renderRoutes();renderCalendar();
  const cached=cache.get(key);if(!force&&cached&&Date.now()-cached.at<60000){finishData(cached.records,cached.errors);return;}
@@ -135,13 +136,13 @@ async function bootDatasets(force=false){
  try{const [data,operation,timetable]=await Promise.all([loadSavedDataset({catalogs,carriers:['KE','OZ'],origin:state.origin,signal:own.signal,force,onProgress:p=>{if(attempt!==bootAttempt)return;const percent=Math.floor(p.completed*100/p.total);$('boot-progress').value=percent;$('boot-percent').textContent=percent+'%';$('boot-stage').textContent=AIRLINES[p.source.carrier].name+' · '+p.source.region;$('boot-detail').textContent=`${p.completed}/${p.total}개 저장 자료 불러오기 완료`;}}),readOperationPolicy(force,own.signal),readTimetable(force,own.signal)]);
   if(attempt!==bootAttempt)return;acceptOperationPolicy(operation);acceptTimetable(timetable);
   for(const [carrier,result] of Object.entries(data.results)){const key=`${carrier}:${state.origin}`,merged=retainUnavailableRegions(result,cache.get(key)?.records);data.results[carrier]=merged;cache.set(key,{...merged,at:Date.now()});}
-  const total=Object.values(data.results).reduce((n,r)=>n+r.records.length,0),failed=Object.values(data.results).some(r=>r.errors.length>0)||Boolean(operationWarning);
+  const total=Object.values(data.results).reduce((n,r)=>n+limitDisplayRecords(r.records).length,0),failed=Object.values(data.results).some(r=>r.errors.length>0)||Boolean(operationWarning);
   if(failed){$('boot-stage').textContent=operationWarning?'운항 대조 자료 연결을 확인하지 못했습니다.':'일부 자료 연결을 확인하지 못했습니다.';$('boot-detail').textContent=`불러온 ${total}개 노선·월은 유지됩니다. 다시 시도하거나 불러온 자료로 볼 수 있습니다.`;$('boot-actions').hidden=false;}
   else{$('boot-progress').value=100;$('boot-percent').textContent='100%';$('boot-stage').textContent='저장 자료 불러오기 완료';$('boot-detail').textContent=`${total}개 노선·월 · 메인 화면으로 이동합니다.`;await revealMain();}
  }catch{$('boot-stage').textContent='저장 자료에 연결하지 못했습니다.';$('boot-detail').textContent='인터넷 연결 후 다시 불러오기를 눌러주세요.';$('boot-actions').hidden=false;}finally{clearTimeout(timer);}
 }
 function readForm({load=true}={}){
- const origin=$('origin').value.trim().toUpperCase(),start=$('start').value,end=$('end').value;if(!/^[A-Z]{3}$/.test(origin)){formError('기준 공항 코드는 영문 3자리로 입력해주세요.');return false;}if(!validDate(start)||!validDate(end)||start>end){formError('시작일과 종료일을 다시 선택해주세요.');return false;}if(start<today||end>bookingEnd()){formError(`오늘부터 ${state.carrier==='KE'?360:359}일 뒤까지 선택할 수 있습니다.`);return false;}
+ const origin=$('origin').value.trim().toUpperCase(),start=$('start').value,end=$('end').value;if(!/^[A-Z]{3}$/.test(origin)){formError('기준 공항 코드는 영문 3자리로 입력해주세요.');return false;}if(!validDate(start)||!validDate(end)||start>end){formError('시작일과 종료일을 다시 선택해주세요.');return false;}if(start<today||end>bookingEnd()){formError(state.carrier==='KE'?'대한항공 홈페이지는 임시로 2026년 12월 17일까지 표시합니다.':'오늘부터 359일 뒤까지 선택할 수 있습니다.');return false;}
  const changed=state.origin!==origin;Object.assign(state,{origin,start,end,region:$('region').value,country:$('country').value,airport:$('destination').value,seat:$('seat').value,query:'',onlyMarked:$('only-marked').checked});$('origin').value=origin;setGeographyOptions();formError('');setMonths();if(changed&&load)loadData();else{stats();renderRoutes();renderCalendar();}return true;
 }
 async function selectCarrier(carrier){if(state.carrier===carrier)return;state.carrier=carrier;state.seat='all';document.body.dataset.carrier=carrier;
@@ -159,7 +160,7 @@ async function init(){
  for(const id of ['seat','destination','only-marked'])$(id).addEventListener('change',()=>readForm());$('refresh').addEventListener('click',()=>{if(readForm({load:false}))loadData(true);});
  for(const button of document.querySelectorAll('[data-carrier]')){button.addEventListener('click',()=>selectCarrier(button.dataset.carrier));button.addEventListener('keydown',event=>{if(['ArrowLeft','ArrowRight'].includes(event.key)){event.preventDefault();const next=state.carrier==='KE'?'OZ':'KE';document.querySelector(`[data-carrier=${next}]`).focus();selectCarrier(next);}});}
  for(const button of document.querySelectorAll('[data-direction]'))button.addEventListener('click',()=>{state.direction=button.dataset.direction;updateView();});
- $('month').addEventListener('change',()=>{if(validMonth($('month').value)){state.month=$('month').value;updateView();}});for(const [id,delta] of [['prev-month',-1],['next-month',1]])$(id).addEventListener('click',()=>{const next=monthStep(state.month,delta);if(next>=state.start.slice(0,7)&&next<=state.end.slice(0,7)){state.month=next;updateView();}});
+ $('month').addEventListener('change',()=>{if(validMonth($('month').value)&&$('month').value>=state.start.slice(0,7)&&$('month').value<=bookingEnd().slice(0,7)&&$('month').value<=state.end.slice(0,7)){state.month=$('month').value;updateView();}});for(const [id,delta] of [['prev-month',-1],['next-month',1]])$(id).addEventListener('click',()=>{const next=monthStep(state.month,delta);if(next>=state.start.slice(0,7)&&next<=state.end.slice(0,7)){state.month=next;updateView();}});
  $('day-dialog').addEventListener('click',e=>{if(e.target===$('day-dialog')){const r=$('day-dialog').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('day-dialog').close();}});
  await bootDatasets();
 }
