@@ -1,6 +1,6 @@
 // Presentation compatibility for intact old calendars; never operation evidence.
 import {TIMETABLE_FIELDS as FIELDS,referenceStatus} from './timetable.js?v=148';
-import {KE_DISPLAY_END} from './model.js?v=148';
+import {KE_DISPLAY_END} from './model.js?v=153';
 const sourceKey=r=>[r.carrier,r.origin,r.destination,r.month,r.success,r.sourceUpdatedAt,r.collectedAt].join('|');
 const validSource=s=>s?.status==='OBSERVED'&&FIELDS.every(f=>typeof s[f]==='boolean');
 export function projectLegacySavedRecords(rawRecords,records,index,{end,endForRecord}={}){
