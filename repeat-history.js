@@ -24,7 +24,7 @@ function normalizeEvent(value) {
     collectedAt: clock(value.collectedAt), sourceUpdatedAt: clock(value.sourceUpdatedAt),
     success: Number.isFinite(value.success) && value.success >= 0 ? value.success : null,
     source: typeof value.source === 'string' ? value.source.slice(0, 80) : '',
-    scope: ['EUROPE', 'US','AMERICAS','OCEANIA'].includes(value.scope) ? value.scope : null,
+    scope: ['EUROPE', 'US','AMERICAS','OCEANIA','ALL_ROUTES'].includes(value.scope) ? value.scope : null,
     ...(hasReference?{referenceMode:value.referenceMode,referenceMonth:value.referenceMonth,referenceStatus:['COMPLETE','INCOMPLETE','MISSING'].includes(value.referenceStatus)?value.referenceStatus:'MISSING',referenceDates:Array.isArray(value.referenceDates)?[...new Set(value.referenceDates)].filter(date=>validDate(date)&&date.slice(0,7)===value.referenceMonth&&new Date(date+'T00:00:00Z').getUTCDay()===value.weekday).sort().slice(0,5):[],referenceSuccess:Number.isFinite(value.referenceSuccess)&&value.referenceSuccess>=0?value.referenceSuccess:null}:{})
   };
 }
