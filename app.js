@@ -1,12 +1,12 @@
-import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor} from './model.js?v=137-weekdays';
-import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=137-weekdays';
-import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=137-weekdays';
+import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes,summarize,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor} from './model.js?v=138';
+import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=138';
+import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=138';
 const $=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const today=todayKST();
 const state={carrier:'KE',origin:'ICN',region:'전체',country:'전체',airport:'전체',query:'',seat:'all',start:today,end:addDays(today,360),month:today.slice(0,7),direction:'out',selected:null,records:[],routes:[],filtered:[],loading:false};
 let catalogs,controller,generation=0,bootAttempt=0,operationPolicy={schema:1,weeks:[]},operationWarning='';const cache=new Map();
-async function readOperationPolicy(force,signal){try{return {policy:await loadOperationPolicy({force,signal}),warning:''};}catch{return {policy:null,warning:'운항 대조 자료에 연결하지 못했습니다. 마지막으로 확인된 제외 기준을 유지하며, 운항 대조를 확인할 수 없는 날짜의 좌석 표식은 표시하지 않습니다. 인천↔프랑크푸르트에는 사용자 지정 요일 기준을 적용합니다.'};}}
+async function readOperationPolicy(force,signal){try{return {policy:await loadOperationPolicy({force,signal}),warning:''};}catch{return {policy:null,warning:'운항 대조 자료에 연결하지 못했습니다. 마지막으로 확인된 제외 기준을 유지하며, 항공편별 운항 대조를 확인할 수 없는 표식은 표시하지 않습니다.'};}}
 function acceptOperationPolicy(result){if(result.policy)operationPolicy=result.policy;operationWarning=result.warning;}
 const dateFormat=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const fullTime=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
@@ -89,14 +89,22 @@ function renderCalendar(){
  else $('calendar-source').textContent=route?'이 방향·월은 저장 자료가 없습니다.':'노선을 선택하면 수집 시각을 볼 수 있습니다.';
 }
 function updateView(){stats();renderRoutes();renderCalendar();}
+function flightDetails(info,target){
+ if(state.carrier!=='KE'||!Array.isArray(info.day?.flights)||!info.day.flights.length)return;
+ const products=[['economyAward','일반석 보너스'],['premiumAward','프리미엄석 보너스'],['prestigeAward','프레스티지 보너스'],['premiumUpgrade','프리미엄석 승급'],['prestigeUpgrade','프레스티지 승급'],['firstCombined','퍼스트 보너스·승급']];
+ for(const [kind,title] of [['DIRECT','대한항공 직접 운항'],['CODESHARE','공동운항편'],['UNKNOWN','운항사·운항 미확인']]){
+  const flights=info.day.flights.filter(f=>f.serviceKind===kind);if(!flights.length)continue;const section=node('section','flight-group');section.dataset.serviceKind=kind;section.append(node('h3','',title));
+  for(const f of flights){const row=node('div','flight-detail');row.dataset.flightNumber=f.number;row.dataset.operationStatus=f.operationStatus;row.append(node('strong','flight-heading',f.number+' · '+f.departureTime+(f.arrivalTime?' → '+f.arrivalTime:'')),node('span','flight-operator',f.operatorName||'운항사 미확인'));const label=f.weekdayExcluded?'비운항 · 지정 요일 기준':f.viewPending?'운항 대조 전':f.operationStatus==='NO_FLIGHT'?'비운항 · 좌석 표식 제외':f.operationStatus==='OPERATING'?(f.noSeat?'운항 · 공개 좌석 표식 없음':'운항'):'운항 미확인 · 좌석 표식 제외';row.append(node('span','flight-operation',label));const badges=node('div','flight-awards');if(f.operationStatus==='OPERATING'&&!f.weekdayExcluded&&!f.viewPending)for(const [field,text] of products)if(f[field]){const badge=node('span','flight-award',text);badge.dataset.field=field;badges.append(badge);}if(!badges.children.length)badges.append(node('span','flight-empty',f.operationStatus==='NO_FLIGHT'||f.weekdayExcluded||f.viewPending?'표식 합계에서 제외':f.awardDataStatus==='UNKNOWN'?'좌석 표식 미확인':'선택 항공편의 공개 표식 없음'));row.append(badges);section.append(row);}target.append(section);
+ }
+}
 function openDay(date,info){
  const route=currentRoute();if(!route)return;$('day-title').textContent=new Intl.DateTimeFormat('ko-KR',{month:'long',day:'numeric',weekday:'long',timeZone:'UTC'}).format(new Date(date+'T00:00:00Z'));
  $('day-route').textContent=`${AIRLINES[state.carrier].name} · ${state.direction==='out'?state.origin:route.code} → ${state.direction==='out'?route.code:state.origin}`;const markers=$('day-markers');markers.replaceChildren();
  if(info.kind==='unknown')markers.append(node('p','unknown-message',info.label+' · 좌석 여부를 판단할 수 없습니다.'));else if(info.kind==='noflight')markers.append(node('p','unknown-message',info.label+' · 좌석 표식과 합계에서 제외했습니다.'));else AIRLINES[state.carrier].labels.forEach((label,i)=>{if(state.seat!=='all'&&state.seat!==String(i))return;const row=node('div','day-marker-row'),name=node('span','');name.append(node('i','marker mark-'+i),document.createTextNode(label));row.append(name,node('strong',info.day[FIELDS[i]]?'positive':'',info.day[FIELDS[i]]?'표시 있음':'공개 표식 없음'));markers.append(row);});
- $('day-times').replaceChildren();if(info.record){$('day-times').append(node('p','',`항공사 기준 ${fullTime.format(new Date(info.record.sourceUpdatedAt))}`),node('p','',`실제 수집 ${fullTime.format(info.record.success)}`));}else $('day-times').append(node('p','','저장된 수집 시각 없음'));
+ flightDetails(info,markers);$('day-times').replaceChildren();if(info.record){$('day-times').append(node('p','',`항공사 기준 ${fullTime.format(new Date(info.record.sourceUpdatedAt))}`),node('p','',`실제 수집 ${fullTime.format(info.record.success)}`));}else $('day-times').append(node('p','','저장된 수집 시각 없음'));
  $('day-dialog').showModal();
 }
-function finishData(records,errors){const masked=applyOperationPolicy(records,operationPolicy,{forcePending:Boolean(operationWarning)});state.records=masked.records;state.routes=makeRoutes(state.records,catalogs[state.carrier],state.origin);state.loading=false;$('refresh').disabled=false;status(state.records.length?`저장 ${state.records.length}개 노선·월 연결됨`:'저장된 자료 없음',state.records.length?'ready':'');message([errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 새 자료 불러오기로 다시 확인할 수 있습니다.':'',operationWarning,state.carrier==='KE'?'대한항공은 운항표 대조가 끝난 날짜만 좌석 표식을 표시합니다. 나머지는 확인 중입니다. 인천↔프랑크푸르트: 수·금·일 출발 기준 (사용자 지정)'+(masked.pendingDays?' 운항 대조 전 '+masked.pendingDays+'개 노선·날짜':''):'',masked.warnings.length?'운항 대조 자료가 올바르지 않은 일부 저장 결과는 표시에서 제외했습니다.':''].filter(Boolean).join(' '));stats();renderRoutes();renderCalendar();}
+function finishData(records,errors){const masked=applyOperationPolicy(records,operationPolicy,{forcePending:Boolean(operationWarning)});state.records=masked.records;state.routes=makeRoutes(state.records,catalogs[state.carrier],state.origin);state.loading=false;$('refresh').disabled=false;status(state.records.length?`저장 ${state.records.length}개 노선·월 연결됨`:'저장된 자료 없음',state.records.length?'ready':'');message([errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 새 자료 불러오기로 다시 확인할 수 있습니다.':'',operationWarning,state.carrier==='KE'?'대한항공 직접 운항·공동운항편을 함께 표시합니다. 항공편별 운항이 확인된 표식만 합산하며, 재수집 전 자료는 확인 중입니다. 인천↔프랑크푸르트: 직접 운항편 수·금·일 출발 기준 (사용자 지정)'+(masked.pendingDays?' 운항 대조 전 '+masked.pendingDays+'개 노선·날짜':''):'',masked.warnings.length?'운항 대조 자료가 올바르지 않은 일부 저장 결과는 표시에서 제외했습니다.':''].filter(Boolean).join(' '));stats();renderRoutes();renderCalendar();}
 async function loadData(force=false){
  const id=++generation;controller?.abort();controller=new AbortController();const own=controller,carrier=state.carrier,origin=state.origin,key=`${carrier}:${origin}`;state.loading=true;state.selected=null;state.records=[];state.routes=[];message('');status('저장 자료 불러오는 중');$('refresh').disabled=true;stats();renderRoutes();renderCalendar();
  const cached=cache.get(key);if(!force&&cached&&Date.now()-cached.at<60000){finishData(cached.records,cached.errors);return;}

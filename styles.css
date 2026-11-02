@@ -86,3 +86,5 @@ body[data-carrier="OZ"] .month-type-counts{grid-template-columns:repeat(2,minmax
 .visitor-footer{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:8px 14px;padding:4px 18px 28px;color:#6e8294;font-size:11px;text-align:center}.visitor-footer strong{font-size:12px;font-weight:650;color:#42627d}
 
 .day-noflight{background:#f6f4f1;border-color:transparent}.day-no-flight{font-size:8px;color:#8d8377;white-space:nowrap}
+
+.flight-group{margin-top:22px}.flight-group h3{font-size:13px;margin:0 0 8px;color:#536b7e}.flight-detail{display:flex;flex-direction:column;gap:6px;padding:13px 0;border-bottom:1px solid #e7edf2}.flight-heading{font-size:13px;font-weight:650}.flight-operator,.flight-operation,.flight-empty{font-size:11px;color:#8091a0}.flight-awards{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px}.flight-award{font-size:10px;border-radius:5px;padding:4px 7px;background:#eaf3f8;color:#366e91}
