@@ -1,0 +1,310 @@
+{
+  "schema": 1,
+  "updatedAt": "2026-11-02T04:06:31.077Z",
+  "weeks": [
+    {
+      "schema": 1,
+      "carrier": "KE",
+      "origin": "ICN",
+      "destination": "FRA",
+      "queriedDate": "2027-01-01",
+      "weekStart": "2026-12-28",
+      "observedAt": "2026-11-02T04:06:31.077Z",
+      "sourceUrl": "https://www.koreanair.com/flight-status?departure=ICN&arrival=CDG&departureDate=20261102&arrivalDate=20261102&isSchedule=T",
+      "ownFlightRows": 1,
+      "dates": [
+        {
+          "date": "2026-12-28",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2026-12-29",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2026-12-30",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2026-12-31",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-01",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2027-01-02",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-03",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "carrier": "KE",
+      "origin": "ICN",
+      "destination": "FRA",
+      "queriedDate": "2027-01-08",
+      "weekStart": "2027-01-04",
+      "observedAt": "2026-11-02T04:06:31.077Z",
+      "sourceUrl": "https://www.koreanair.com/flight-status?departure=ICN&arrival=CDG&departureDate=20261102&arrivalDate=20261102&isSchedule=T",
+      "ownFlightRows": 1,
+      "dates": [
+        {
+          "date": "2027-01-04",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-05",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-06",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2027-01-07",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-08",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2027-01-09",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-10",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "carrier": "KE",
+      "origin": "ICN",
+      "destination": "FRA",
+      "queriedDate": "2027-01-15",
+      "weekStart": "2027-01-11",
+      "observedAt": "2026-11-02T04:06:31.077Z",
+      "sourceUrl": "https://www.koreanair.com/flight-status?departure=ICN&arrival=CDG&departureDate=20261102&arrivalDate=20261102&isSchedule=T",
+      "ownFlightRows": 1,
+      "dates": [
+        {
+          "date": "2027-01-11",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-12",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-13",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2027-01-14",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-15",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2027-01-16",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-17",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "carrier": "KE",
+      "origin": "ICN",
+      "destination": "FRA",
+      "queriedDate": "2027-01-22",
+      "weekStart": "2027-01-18",
+      "observedAt": "2026-11-02T04:06:31.077Z",
+      "sourceUrl": "https://www.koreanair.com/flight-status?departure=ICN&arrival=CDG&departureDate=20261102&arrivalDate=20261102&isSchedule=T",
+      "ownFlightRows": 1,
+      "dates": [
+        {
+          "date": "2027-01-18",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-19",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-20",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2027-01-21",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-22",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2027-01-23",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-24",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "carrier": "KE",
+      "origin": "ICN",
+      "destination": "FRA",
+      "queriedDate": "2027-01-29",
+      "weekStart": "2027-01-25",
+      "observedAt": "2026-11-02T04:06:31.077Z",
+      "sourceUrl": "https://www.koreanair.com/flight-status?departure=ICN&arrival=CDG&departureDate=20261102&arrivalDate=20261102&isSchedule=T",
+      "ownFlightRows": 1,
+      "dates": [
+        {
+          "date": "2027-01-25",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-26",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-27",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2027-01-28",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-29",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        },
+        {
+          "date": "2027-01-30",
+          "status": "NO_FLIGHT",
+          "flights": []
+        },
+        {
+          "date": "2027-01-31",
+          "status": "OPERATING",
+          "flights": [
+            {
+              "number": "KE945"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
