@@ -13,7 +13,7 @@ function normalizeEvent(value) {
   const dates = Array.isArray(value.dates) ? [...new Set(value.dates)].filter(date => validDate(date) && date.slice(0, 7) === value.month && new Date(date + 'T00:00:00Z').getUTCDay() === value.weekday).sort() : [];
   if (!dates.length || dates.length > 5 || dates.length !== value.dates.length) return null;
   const matchedDates = value.kind === 'EXCLUDED' ? [...dates] : Array.isArray(value.matchedDates) ? [...new Set(value.matchedDates)].filter(date => dates.includes(date)).sort() : [];
-  const hasReference=value.source==='USER_REFERENCE_MONTH_TRIPLET_V3'&&validDate(value.referenceMonth+'-01')&&value.referenceMonth!==value.month&&['JANUARY_FOR_DECEMBER','PREVIOUS_COMPLETE_MONTH'].includes(value.referenceMode);
+  const hasReference=value.source==='USER_REFERENCE_MONTH_TRIPLET_V3'&&validDate(value.referenceMonth+'-01')&&value.referenceMonth!==value.month&&['JANUARY_FOR_DECEMBER','PREVIOUS_COMPLETE_MONTH','NEXT_MONTH_COMPARISON'].includes(value.referenceMode);
   const checkDates = hasReference&&Array.isArray(value.checkDates)?[...new Set(value.checkDates)].filter(date=>dates.includes(date)).sort():dates.filter(date => !matchedDates.includes(date));
   if (value.kind === 'REVIEW' && ((!matchedDates.length&&!hasReference) || !checkDates.length)) return null;
   const issues = Array.isArray(value.issues) ? value.issues.filter(issue => issue && checkDates.includes(issue.date) && typeof issue.reason === 'string').map(issue => ({ date: issue.date, reason: issue.reason.slice(0, 160) })).sort((a, b) => a.date.localeCompare(b.date) || a.reason.localeCompare(b.reason)) : [];

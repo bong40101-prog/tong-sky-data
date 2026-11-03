@@ -1,8 +1,9 @@
+import {setupFeedback} from './feedback.js?v=160';
 import {createSummaryCache} from './view-cache.js?v=157';
 import {createNoticeController} from './notices.js?v=154';
-import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=159';
+import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=160';
 import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes as filterRoutesRaw,summarize as summarizeRaw,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=159';
-import {collectRepeatHistory,mergeRepeatHistory,readRepeatHistory,writeRepeatHistory,serializeRepeatHistory} from './repeat-history.js?v=158';
+import {collectRepeatHistory,mergeRepeatHistory,readRepeatHistory,writeRepeatHistory,serializeRepeatHistory} from './repeat-history.js?v=160';
 import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=159';
 import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=148';
 import {projectLegacySavedRecords} from './legacy.js?v=159';
@@ -14,6 +15,7 @@ const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.classNa
 const today=todayKST();
 const noticeController=createNoticeController();
 const state={carrier:'KE',origin:'ICN',region:'전체',country:'전체',airport:'전체',query:'',seat:'all',start:today,end:addDays(today,359),month:today.slice(0,7),direction:'out',selected:null,records:[],routes:[],filtered:[],loading:false};
+setupFeedback({getContext:()=>({carrier:state.carrier,origin:state.origin,destination:state.selected??'',month:state.month,direction:state.direction,start:state.start,end:state.end})});
 let catalogs,controller,generation=0,bootAttempt=0,operationPolicy={schema:1,weeks:[]},operationWarning='';const cache=new Map();
 let timetableIndex=null,timetableWarning='',repeatRecords=[],repeatHistory=[],historySaved=true,historyView=null;
 try{repeatHistory=readRepeatHistory(globalThis.localStorage);}catch{}

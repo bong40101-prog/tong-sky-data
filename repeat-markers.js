@@ -76,6 +76,32 @@ export function repeatedMarkerRule(record,catalog,projectedRecord=record,related
  return evaluateRule(record,ruleContext(catalog,relatedRecords));
 }
 function evaluateRule(record,context){
+ const base=evaluateBaseRule(record,context);
+ if(!base||record.month<'2027-01'||!base.reviews.length)return base;
+ const current=context.inspect(record);if(current.invalid||current.duplicates.size)return base;
+ const nextMonth=new Date(Date.UTC(Number(record.month.slice(0,4)),Number(record.month.slice(5,7)),1)).toISOString().slice(0,7);
+ const reference=context.latest(record).get(nextMonth);
+ if(!reference||!context.inspect(reference).complete)return base;
+ const referenceDays=context.inspect(reference),referencePolicy=context.own(reference);
+ const reviews=[],resolvedReviews=[],evidence=[...base.evidence];
+ for(const review of base.reviews){
+  const dates=referenceDays.expected.filter(date=>weekday(date)===review.weekday);
+  const meta={referenceMode:'NEXT_MONTH_COMPARISON',referenceMonth:nextMonth,referenceStatus:'COMPLETE',referenceDates:dates,referenceSuccess:reference.success??null};
+  const matches=dates.filter(date=>triplet(referenceDays.days.get(date)));
+  // A fully observed next weekday with no triplets resolves the warning only.
+  // It never deletes current seat marks or establishes actual airline operations.
+  if(!matches.length&&dates.every(date=>observedFlags(referenceDays.days.get(date)))){
+   resolvedReviews.push({weekday:review.weekday,dates:[...review.dates],decision:'KEEP_ORIGINAL_MARKERS',...meta});continue;
+  }
+  const proof=referencePolicy.evidence.find(row=>row.weekday===review.weekday);
+  const target=review.dates.filter(date=>triplet(current.days.get(date)));
+  const conflicts=review.dates.some(date=>current.known(current.days.get(date))&&!triplet(current.days.get(date)));
+  if(proof&&target.length&&!conflicts){evidence.push({weekday:review.weekday,dates:target,...meta});continue;}
+  reviews.push({...review,...meta});
+ }
+ return {...base,source:REFERENCE_RULE,weekdays:evidence.map(row=>row.weekday).sort((a,b)=>a-b),evidence:evidence.sort((a,b)=>a.weekday-b.weekday),reviews,resolvedReviews};
+}
+function evaluateBaseRule(record,context){
  const scope=context.scope(record);
  if(scope&&validDate(record.month+'-01')&&record.month<'2026-12')return {source:RULE,scope,month:record.month,origin:record.origin,destination:record.destination,candidateDates:[],weekdays:[],evidence:[],reviews:[]};
  const base=context.own(record);if(!base)return null;
