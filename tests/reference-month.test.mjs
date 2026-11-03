@@ -13,6 +13,17 @@ function record(month,{origin='ICN',destination='FCO',off=[0,2,4,5],unknown=[]}=
 }
 const project=records=>projectRepeatedMarkerRecords(records,records,catalog);
 const day=(r,date)=>r.dates.find(d=>d.date===date);
+test('projection indexes are isolated by route and rebuilt after source or catalog edits',()=>{
+ const september=record('2027-09'),october=record('2027-10',{unknown:[29,30,31]}),paris=record('2027-09',{destination:'CDG'}),raw=[september,october,paris];
+ const first=project(raw);
+ assert.ok(day(first[1],'2027-10-01').repeatMarkerExclusion);
+ first[0].repeatMarkerPolicy.evidence[0].dates.length=0;
+ assert.ok(first[2].repeatMarkerPolicy.evidence[0].dates.length>0);
+ for(const d of september.dates)if(new Date(d.date+'T00:00:00Z').getUTCDay()===5)d.prestigeAward=false;
+ const second=project(raw);assert.equal(day(second[1],'2027-10-01').repeatMarkerExclusion,undefined);assert.ok(day(second[1],'2027-10-01').repeatMarkerReview);
+ const changedCatalog=structuredClone(catalog);for(const cities of Object.values(changedCatalog.regions))for(let i=cities.length-1;i>=0;i--)if(cities[i].code==='FCO')cities.splice(i,1);
+ assert.equal(projectRepeatedMarkerRecords(raw,raw,changedCatalog)[1].repeatMarkerPolicy,undefined);
+});
 test('partial October uses September for all observed Sunday and Friday triplets, preserving unopened dates and inputs',()=>{
  const raw=[record('2027-09'),record('2027-10',{unknown:[29,30,31]})],before=structuredClone(raw),out=project(raw)[1];
  assert.deepEqual(out.repeatMarkerPolicy.weekdays,[0,2,4,5]);
