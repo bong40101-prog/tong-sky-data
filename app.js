@@ -1,11 +1,11 @@
 import {createSummaryCache} from './view-cache.js?v=157';
 import {createNoticeController} from './notices.js?v=154';
-import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=158';
-import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes as filterRoutesRaw,summarize as summarizeRaw,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=158';
+import {projectRepeatedMarkerRecords} from './repeat-markers.js?v=159';
+import {AIRLINES,BASE,FIELDS,REGIONS,todayKST,addDays,validDate,validMonth,unpackDocument,readDocument,makeRoutes,filterRoutes as filterRoutesRaw,summarize as summarizeRaw,cellInfo,monthStep,daysInMonth,countriesFor,airportsFor,KE_DISPLAY_END,limitDisplayRecords,isExtendedKeRoute,isExcludedRecord} from './model.js?v=159';
 import {collectRepeatHistory,mergeRepeatHistory,readRepeatHistory,writeRepeatHistory,serializeRepeatHistory} from './repeat-history.js?v=158';
-import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=158';
+import {loadSavedDataset,retainUnavailableRegions} from './data.js?v=159';
 import {loadOperationPolicy,applyOperationPolicy} from './operation.js?v=148';
-import {projectLegacySavedRecords} from './legacy.js?v=148';
+import {projectLegacySavedRecords} from './legacy.js?v=159';
 import {loadTimetableReference,projectTimetableRecords,timetableRouteSummary,lookupTimetableDay} from './timetable.js?v=148';
 const summarize=createSummaryCache(summarizeRaw);
 const filterRoutes=(routes,filter)=>filterRoutesRaw(routes,filter,summarize);
@@ -15,7 +15,7 @@ const today=todayKST();
 const noticeController=createNoticeController();
 const state={carrier:'KE',origin:'ICN',region:'전체',country:'전체',airport:'전체',query:'',seat:'all',start:today,end:addDays(today,359),month:today.slice(0,7),direction:'out',selected:null,records:[],routes:[],filtered:[],loading:false};
 let catalogs,controller,generation=0,bootAttempt=0,operationPolicy={schema:1,weeks:[]},operationWarning='';const cache=new Map();
-let timetableIndex=null,timetableWarning='',repeatRecords=[],repeatHistory=[],historySaved=true;
+let timetableIndex=null,timetableWarning='',repeatRecords=[],repeatHistory=[],historySaved=true,historyView=null;
 try{repeatHistory=readRepeatHistory(globalThis.localStorage);}catch{}
 async function readTimetable(force,signal){const own=new AbortController(),abort=()=>own.abort(signal.reason);if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});const timer=setTimeout(()=>own.abort(new Error('참고표 연결 시간 초과')),6000);try{return {index:await loadTimetableReference({force,signal:own.signal}),warning:''};}catch{return {index:null,warning:'운항요일 참고표를 불러오지 못했습니다. 저장 좌석 자료와 기존 운항 대조 결과는 유지합니다.'};}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}}
 function acceptTimetable(result){if(result.index)timetableIndex=result.index;timetableWarning=result.warning;}
@@ -101,7 +101,7 @@ function renderCalendar(){
  const offset=new Date(state.month+'-01T00:00:00Z').getUTCDay();for(let i=0;i<offset;i++){const blank=node('div','day-blank');blank.setAttribute('aria-hidden','true');grid.append(blank);}
  for(let day=1;day<=(limited&&state.month===KE_DISPLAY_END.slice(0,7)?Number(KE_DISPLAY_END.slice(8)):daysInMonth(state.month));day++){const date=`${state.month}-${String(day).padStart(2,'0')}`,inRange=date>=state.start&&date<=calendarEnd,info=inRange?cellInfo(route,state.direction,date,state.carrier,state.seat):{kind:'outside',label:'선택 기간 밖',marks:[]},button=node('button','day day-'+info.kind),weekday=(offset+day-1)%7;button.type='button';button.dataset.date=date;if(info.needsReview)button.classList.add('day-review');
  if(weekday===0)button.classList.add('sunday');if(weekday===6)button.classList.add('saturday');if(date===today)button.classList.add('today');button.disabled=!route||!inRange;button.setAttribute('aria-label',`${date} · ${info.label}${date===today?' · 오늘':''}`);
- button.append(node('span','day-number',String(day)));const marks=node('span','day-marks');for(const mark of info.marks){const chip=node('span','day-type day-type-'+mark.index,['보너스','승급','퍼스트'][mark.index]);chip.title=mark.label;chip.setAttribute('aria-hidden','true');marks.append(chip);}if(state.carrier==='KE'&&(info.day?.repeatMarkerExclusion||info.day?.routeWeekdayExcluded))marks.append(nonoperationCaption());else if(info.kind==='unknown')marks.append(node('span','day-unknown',info.day?.timetableConflict?'일정 불일치':info.day?.operationPending?'운항 대조 전':'—'));if(info.needsReview)marks.append(node('span','day-review-tag','확인필요'));if(info.kind==='noflight')marks.append(state.carrier==='KE'?nonoperationCaption('day-no-flight'):node('span','day-no-flight','비운항'));if(!inRange)marks.append(node('span','day-outside-note','기간 밖'));button.append(marks);button.addEventListener('click',()=>openDay(date,info));grid.append(button);}
+ button.append(node('span','day-number',String(day)));const marks=node('span','day-marks');for(const mark of info.marks){const chip=node('span','day-type day-type-'+mark.index,['보너스','승급','퍼스트'][mark.index]);chip.title=mark.label;chip.setAttribute('aria-hidden','true');marks.append(chip);}if(info.kind==='unknown'&&!(state.carrier==='KE'&&(info.day?.repeatMarkerExclusion||info.day?.routeWeekdayExcluded)))marks.append(node('span','day-unknown',info.day?.timetableConflict?'일정 불일치':info.day?.operationPending?'운항 대조 전':'—'));if(info.needsReview)marks.append(node('span','day-review-tag','확인필요'));if(info.kind==='noflight'&&state.carrier!=='KE')marks.append(node('span','day-no-flight','비운항'));if(!inRange)marks.append(node('span','day-outside-note','기간 밖'));button.append(marks);button.addEventListener('click',()=>openDay(date,info));grid.append(button);}
  const badge=$('fresh-badge');badge.hidden=!record;
  if(record){$('calendar-source').textContent=`수집 ${fullTime.format(record.success)} · 한국시간`;const fresh=todayKST(new Date(record.success))===today;badge.textContent=fresh?'오늘 수집':'이전 수집 자료';badge.classList.toggle('old',!fresh);}
  else $('calendar-source').textContent=route?'이 방향·월은 저장 자료가 없습니다.':'노선을 선택하면 수집 시각을 볼 수 있습니다.';
@@ -113,6 +113,8 @@ function renderRepeatSummary(record){
  if(policy.reviews.length)target.append(node('strong','repeat-review-title','확인필요'),node('p','repeat-review-copy',policy.reviews.map(p=>`${labels[p.weekday]}요일 ${p.matchedDates.length}/${p.dates.length}일 일치`+(p.referenceMonth?` · ${monthLabel(p.referenceMonth)} 참고`:'')+' · 확인 날짜 '+p.checkDates.map(d=>Number(d.slice(8))+'일').join(', ')+(p.referenceMonth?' · '+[...new Set(p.issues.map(i=>i.reason))].join(', '):'')).join(' / ')+' — 이 요일은 제외하지 않습니다.'));
 }
 function renderRepeatHistory(route){
+ const view=[repeatHistory,state.carrier,state.origin,state.airport!=='전체'?state.airport:route?.code,historySaved];
+ if(historyView&&view.every((value,index)=>value===historyView[index]))return;historyView=view;
  const body=$('repeat-history-body');body.replaceChildren();if(state.carrier!=='KE')return;
  const code=state.airport!=='전체'?state.airport:route?.code,labels=['일','월','화','수','목','금','토'];
  $('repeat-history-scope').textContent=(code?state.origin+' ↔ '+code:'전체 대한항공 노선')+' · 저장된 전체 월 · 원본 달력 반복 기준 · 원본 수집 시각 기준 · '+(historySaved?'이 브라우저에 기록 저장':'현재 조회 기록');
