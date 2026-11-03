@@ -11,18 +11,18 @@ function page(storage){
  const controller=createNoticeController({document:d,storage});controller.show();
  return {dom,d,controller,opened:()=>[...d.querySelectorAll('.announcement-dialog[open]')].map(x=>x.dataset.noticeId),click:(id,cls)=>d.querySelector(`#announcement-${id} .${cls}`).click()};
 }
-test('three notices are separate dialogs outside main, shown one at a time in order',()=>{
+test('four notices are separate dialogs outside main, shown one at a time in order',()=>{
  const p=page(null);try{
-  assert.equal(p.d.querySelectorAll('main .operator-notice').length,0);assert.equal(p.d.querySelectorAll('.announcement-dialog').length,3);assert.deepEqual(p.opened(),['operator']);
-  p.click('operator','notice-close');assert.deepEqual(p.opened(),['ke-range']);p.click('ke-range','notice-close');assert.deepEqual(p.opened(),['excluded-region']);p.click('excluded-region','notice-close');assert.deepEqual(p.opened(),[]);
+  assert.equal(p.d.querySelectorAll('main .operator-notice').length,0);assert.equal(p.d.querySelectorAll('.announcement-dialog').length,4);assert.deepEqual(p.opened(),['operator']);
+  p.click('operator','notice-close');assert.deepEqual(p.opened(),['ke-range']);p.click('ke-range','notice-close');assert.deepEqual(p.opened(),['excluded-region']);p.click('excluded-region','notice-close');assert.deepEqual(p.opened(),['feedback']);p.click('feedback','notice-close');assert.deepEqual(p.opened(),[]);
   p.controller.show();assert.deepEqual(p.opened(),[]);
  }finally{p.dom.window.close();}
 });
 test('never-show persists each notice independently; ordinary close does not persist, and saved calendar keys stay untouched',()=>{
  const values=new Map([['calendar','keep']]),storage={getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v)};
- let p=page(storage);try{p.click('operator','notice-dismiss');p.click('ke-range','notice-close');p.click('excluded-region','notice-dismiss');assert.deepEqual(p.opened(),[]);}finally{p.dom.window.close();}
+ let p=page(storage);try{p.click('operator','notice-dismiss');p.click('ke-range','notice-close');p.click('excluded-region','notice-dismiss');assert.deepEqual(p.opened(),['feedback']);p.click('feedback','notice-dismiss');assert.deepEqual(p.opened(),[]);}finally{p.dom.window.close();}
  p=page(storage);try{assert.deepEqual(p.opened(),['ke-range']);p.click('ke-range','notice-dismiss');assert.deepEqual(p.opened(),[]);}finally{p.dom.window.close();}
- p=page(storage);try{assert.deepEqual(p.opened(),[]);assert.equal(values.get('calendar'),'keep');assert.equal(values.size,4);}finally{p.dom.window.close();}
+ p=page(storage);try{assert.deepEqual(p.opened(),[]);assert.equal(values.get('calendar'),'keep');assert.equal(values.size,5);}finally{p.dom.window.close();}
 });
 test('escape advances without saving a permanent dismissal',()=>{
  const values=new Map(),storage={getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v)},p=page(storage);try{
@@ -34,4 +34,13 @@ test('denied storage reports failed permanent dismissal and still allows ordinar
   p.click('operator','notice-dismiss');assert.deepEqual(p.opened(),['operator']);assert.equal(p.d.querySelector('#announcement-operator .notice-save-status').hidden,false);assert.match(p.d.querySelector('#announcement-operator .notice-save-status').textContent,/저장하지 못했습니다/);
   p.click('operator','notice-close');assert.deepEqual(p.opened(),['ke-range']);
  }finally{p.dom.window.close();}
+});
+
+test('existing three permanent dismissals survive update and only the new feedback notice appears',()=>{
+ const ids=['operator','ke-range','excluded-region'];
+ const values=new Map(ids.map(id=>['tongsky.notice.dismissed.v1.'+id,'1']));
+ const storage={getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v)};
+ let p=page(storage);try{assert.deepEqual(p.opened(),['feedback']);p.click('feedback','notice-close');assert.deepEqual(p.opened(),[]);}finally{p.dom.window.close();}
+ p=page(storage);try{assert.deepEqual(p.opened(),['feedback']);p.click('feedback','notice-dismiss');assert.deepEqual(p.opened(),[]);}finally{p.dom.window.close();}
+ p=page(storage);try{assert.deepEqual(p.opened(),[]);for(const id of ids)assert.equal(values.get('tongsky.notice.dismissed.v1.'+id),'1');}finally{p.dom.window.close();}
 });

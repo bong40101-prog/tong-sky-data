@@ -13,6 +13,38 @@ function record(month,{origin='ICN',destination='FCO',off=[0,2,4,5],unknown=[]}=
 }
 const project=records=>projectRepeatedMarkerRecords(records,records,catalog);
 const day=(r,date)=>r.dates.find(d=>d.date===date);
+test('January follows mixed February to original March and preserves every seat flag',()=>{
+ const jan=record('2027-01',{destination:'ORD',off:[]}),feb=record('2027-02',{destination:'ORD',off:[]}),march=record('2027-03',{destination:'ORD',off:[]});
+ for(const n of [24,26])Object.assign(jan.dates[n-1],flags(triple));for(const n of [7,9,14])Object.assign(feb.dates[n-1],flags(triple));
+ const raw=[jan,feb,march],before=structuredClone(raw),out=project(raw)[0];assert.deepEqual(out.repeatMarkerPolicy.reviews,[]);assert.deepEqual(out.repeatMarkerPolicy.excludedDates,[]);
+ for(const entry of out.repeatMarkerPolicy.resolvedReviews){assert.equal(entry.referenceMonth,'2027-03');assert.deepEqual(entry.referenceCheckedMonths,['2027-02','2027-03']);}
+ assert.deepEqual(raw,before);for(let n=0;n<31;n++)assert.deepEqual(ALL_FIELDS.map(f=>out.dates[n].savedCalendar[f]),ALL_FIELDS.map(f=>jan.dates[n][f]));
+});
+test('comparison chain stops at gaps, newer incomplete snapshots, opposite directions and definite conflicting proof',()=>{
+ const jan=record('2027-01',{destination:'ORD',off:[]}),feb=record('2027-02',{destination:'ORD',off:[]});Object.assign(jan.dates[23],flags(triple));Object.assign(feb.dates[6],flags(triple));
+ const april=record('2027-04',{destination:'ORD',off:[]});
+ for(const refs of [[feb,april],[feb,record('2027-03',{destination:'ORD',off:[],unknown:[31]}),april],[feb,record('2027-03',{origin:'ORD',destination:'ICN',off:[]}),april],[record('2027-02',{destination:'ORD',off:[0]}),record('2027-03',{destination:'ORD',off:[]})]])assert.equal(project([jan,...refs])[0].repeatMarkerPolicy.reviews.length,1);
+ const old=record('2027-03',{destination:'ORD',off:[]}),newer=record('2027-03',{destination:'ORD',off:[],unknown:[31]});newer.success++;assert.equal(project([jan,feb,old,newer,april])[0].repeatMarkerPolicy.reviews.length,1);
+});
+test('every eligible route and direction follows the same mixed-month chain without changing the December boundary',()=>{
+ for(const [region,cities] of Object.entries(catalog.regions)){if(['동북아시아','대한민국'].includes(region))continue;for(const city of cities)for(const reverse of [false,true]){
+  const route={origin:reverse?city.code:'ICN',destination:reverse?'ICN':city.code,off:[]},jan=record('2027-01',route),feb=record('2027-02',route),march=record('2027-03',route);Object.assign(jan.dates[23],flags(triple));Object.assign(feb.dates[6],flags(triple));
+  const out=project([jan,feb,march])[0];assert.equal(out.repeatMarkerPolicy.reviews.length,0,city.code);assert.deepEqual(out.repeatMarkerPolicy.resolvedReviews[0].referenceCheckedMonths,['2027-02','2027-03']);
+ }}
+});
+test('complete mixed current month compares the next month and clears warnings without changing marks',()=>{
+ const feb=record('2027-02',{destination:'ORD',off:[]});for(const n of [7,9,14])Object.assign(feb.dates[n-1],flags(triple));
+ const march=record('2027-03',{destination:'ORD',off:[]}),raw=[feb,march],before=structuredClone(raw),out=project(raw)[0];
+ assert.equal(out.repeatMarkerPolicy.reviews.length,0);assert.equal(out.repeatMarkerPolicy.excludedDates.length,0);
+ assert.deepEqual(out.repeatMarkerPolicy.resolvedReviews.map(r=>r.weekday),[0,2]);
+ for(const n of [7,9,14])assert.equal(out.dates[n-1].savedCalendar.prestigeAward,true);
+ assert.equal(out.repeatMarkerPolicy.resolvedReviews[0].referenceMonth,'2027-03');assert.deepEqual(raw,before);
+});
+test('next comparison needs the immediately next complete month in the same route and direction',()=>{
+ const feb=record('2027-02',{destination:'ORD',off:[]});Object.assign(feb.dates[6],flags(triple));
+ for(const next of [record('2027-04',{destination:'ORD',off:[]}),record('2027-03',{origin:'ORD',destination:'ICN',off:[]}),record('2027-03',{destination:'LHR',off:[]}),record('2027-03',{destination:'ORD',off:[],unknown:[31]})])assert.equal(project([feb,next])[0].repeatMarkerPolicy.reviews.length,1);
+ const next=record('2027-03',{destination:'ORD',off:[]});Object.assign(next.dates[6],flags(triple));assert.equal(project([feb,next])[0].repeatMarkerPolicy.reviews.length,1);
+});
 test('projection indexes are isolated by route and rebuilt after source or catalog edits',()=>{
  const september=record('2027-09'),october=record('2027-10',{unknown:[29,30,31]}),paris=record('2027-09',{destination:'CDG'}),raw=[september,october,paris];
  const first=project(raw);
