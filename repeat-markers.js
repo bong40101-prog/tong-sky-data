@@ -79,26 +79,33 @@ function evaluateRule(record,context){
  const base=evaluateBaseRule(record,context);
  if(!base||record.month<'2027-01'||!base.reviews.length)return base;
  const current=context.inspect(record);if(current.invalid||current.duplicates.size)return base;
- const nextMonth=new Date(Date.UTC(Number(record.month.slice(0,4)),Number(record.month.slice(5,7)),1)).toISOString().slice(0,7);
- const reference=context.latest(record).get(nextMonth);
- if(!reference||!context.inspect(reference).complete)return base;
- const referenceDays=context.inspect(reference),referencePolicy=context.own(reference);
- const reviews=[],resolvedReviews=[],evidence=[...base.evidence];
+ const latest=context.latest(record),reviews=[],resolvedReviews=[],evidence=[...base.evidence];let compared=false;
  for(const review of base.reviews){
-  const dates=referenceDays.expected.filter(date=>weekday(date)===review.weekday);
-  const meta={referenceMode:'NEXT_MONTH_COMPARISON',referenceMonth:nextMonth,referenceStatus:'COMPLETE',referenceDates:dates,referenceSuccess:reference.success??null};
-  const matches=dates.filter(date=>triplet(referenceDays.days.get(date)));
-  // A fully observed next weekday with no triplets resolves the warning only.
-  // It never deletes current seat marks or establishes actual airline operations.
-  if(!matches.length&&dates.every(date=>observedFlags(referenceDays.days.get(date)))){
-   resolvedReviews.push({weekday:review.weekday,dates:[...review.dates],decision:'KEEP_ORIGINAL_MARKERS',...meta});continue;
+  const checkedMonths=[];let month=record.month,pending=review,decided=false;
+  // Follow contiguous complete ORIGINAL months, never another inferred decision.
+  // Stop at a gap or the first definite weekday; do not skip contradictory proof.
+  for(let step=0;step<12;step++){
+   month=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),1)).toISOString().slice(0,7);
+   const reference=latest.get(month);if(!reference||!context.inspect(reference).complete)break;
+   compared=true;checkedMonths.push(month);const ref=context.inspect(reference);
+   const dates=ref.expected.filter(date=>weekday(date)===review.weekday),matches=dates.filter(date=>triplet(ref.days.get(date)));
+   const meta={referenceMode:'NEXT_MONTH_COMPARISON',referenceMonth:month,referenceStatus:'COMPLETE',referenceDates:dates,referenceSuccess:reference.success??null,referenceCheckedMonths:[...checkedMonths]};
+   pending={...review,...meta};
+   if(!matches.length&&dates.every(date=>observedFlags(ref.days.get(date)))){
+    resolvedReviews.push({weekday:review.weekday,dates:[...review.dates],decision:'KEEP_ORIGINAL_MARKERS',...meta});decided=true;break;
+   }
+   if(matches.length===dates.length){
+    const target=review.dates.filter(date=>triplet(current.days.get(date)));
+    const conflicts=review.dates.some(date=>current.known(current.days.get(date))&&!triplet(current.days.get(date)));
+    if(target.length&&!conflicts){evidence.push({weekday:review.weekday,dates:target,...meta});decided=true;}
+    break;
+   }
+   // NO_FLIGHT is not an observed calendar-marker comparison.
+   if(!dates.every(date=>observedFlags(ref.days.get(date))))break;
   }
-  const proof=referencePolicy.evidence.find(row=>row.weekday===review.weekday);
-  const target=review.dates.filter(date=>triplet(current.days.get(date)));
-  const conflicts=review.dates.some(date=>current.known(current.days.get(date))&&!triplet(current.days.get(date)));
-  if(proof&&target.length&&!conflicts){evidence.push({weekday:review.weekday,dates:target,...meta});continue;}
-  reviews.push({...review,...meta});
+  if(!decided)reviews.push(pending);
  }
+ if(!compared)return base;
  return {...base,source:REFERENCE_RULE,weekdays:evidence.map(row=>row.weekday).sort((a,b)=>a-b),evidence:evidence.sort((a,b)=>a.weekday-b.weekday),reviews,resolvedReviews};
 }
 function evaluateBaseRule(record,context){
