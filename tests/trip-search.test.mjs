@@ -3,6 +3,15 @@ import {findTrips,tripPage,TRIP_TYPES} from '../dist/trip-search.js';
 const opts={carrier:'KE',region:'유럽',days:7,today:'2026-11-03',end:'2027-10-28'};
 function route(code,{region='유럽',carrier='KE',out=[],back=[]}={}){const r={code,name:code,country:code,region,legs:{out:new Map(),back:new Map()}};for(const [dir,rows] of [['out',out],['back',back]])for(const [date,award=true,upgrade=false,extra={}] of rows){const month=date.slice(0,7);if(!r.legs[dir].has(month))r.legs[dir].set(month,{carrier,month,success:1,dates:[]});r.legs[dir].get(month).dates.push({date,status:'OBSERVED',prestigeAward:award,prestigeUpgrade:upgrade,firstCombined:false,...extra});}return r;}
 const flatten=g=>tripPage(g,0,100).map(x=>[x.out.code,x.out.date,x.back.code,x.back.date].join('|'));
+test('optional IN and OUT filters independently constrain both airlines and all three categories',()=>{
+ for(const carrier of ['KE','OZ']){
+  const routes=['FRA','AMS','CDG','JFK'].map(code=>route(code,{carrier,region:code==='JFK'?'미주':'유럽',out:[['2026-11-10',true,true]],back:[['2026-11-16',true,true]]}));
+  for(const [inCode,outCode,count] of [['','',9],['FRA','',3],['','FRA',3],['AMS','FRA',1],['FRA','FRA',1],['JFK','',0],['','JFK',0],['ZZZ','',0]]){
+   const result=findTrips(routes,{...opts,carrier,inCode,outCode});assert.deepEqual(result.groups.map(g=>g.total),[count,count,count]);
+   for(const group of result.groups)for(const row of tripPage(group,0,100)){if(inCode)assert.equal(row.out.code,inCode);if(outCode)assert.equal(row.back.code,outCode);}
+  }
+ }
+});
 test('same-city and cross-country pairs are all included, in exactly three categories',()=>{const routes=[route('CDG',{out:[['2026-11-10',true,true]],back:[['2026-11-16',true,true]]}),route('LHR',{out:[['2026-11-10',true,false]],back:[['2026-11-16',true,true]]})];const r=findTrips(routes,opts);assert.deepEqual(r.groups.map(g=>g.total),[4,4,2]);assert.equal(r.groups.length,3);assert.equal(flatten(r.groups[0]).length,4);assert.ok(flatten(r.groups[0]).includes('CDG|2026-11-10|LHR|2026-11-16'));assert.ok(flatten(r.groups[0]).includes('CDG|2026-11-10|CDG|2026-11-16'));assert.equal(TRIP_TYPES.some(t=>t.out===t.back&&t.out==='prestigeUpgrade'),false);});
 test('ten days uses nine calendar days difference and ignores the UI calendar date range',()=>{const r=findTrips([route('CDG',{out:[['2026-11-10']],back:[['2026-11-16'],['2026-11-19']]})],{...opts,days:10,start:'2026-12-01'});assert.deepEqual(flatten(r.groups[0]),['CDG|2026-11-10|CDG|2026-11-19']);});
 test('continents, carriers, directions, past and missing dates never mix',()=>{const r=findTrips([route('CDG',{out:[['2026-11-01'],['2026-11-10']]}),route('JFK',{region:'미주',back:[['2026-11-16']]}),route('LHR',{carrier:'OZ',back:[['2026-11-16']]}),route('FCO',{out:[['2026-11-16']]})],opts);assert.equal(r.groups.reduce((n,g)=>n+g.total,0),0);});

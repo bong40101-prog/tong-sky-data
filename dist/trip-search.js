@@ -9,11 +9,13 @@ export const TRIP_TYPES=[
 
 // Index each direction by date once. Keep Cartesian products as blocks instead
 // of allocating every city pair; counts and pagination include all matches.
-export function findTrips(routes,{carrier,region,days,today,end}){
+export function findTrips(routes,{carrier,region,days,today,end,inCode='',outCode=''}){
  if(!['KE','OZ'].includes(carrier)||!TRIP_REGIONS.includes(region)||!Number.isInteger(days)||days<1||days>360||!validDate(today)||!validDate(end)||today>end)throw new Error('지역과 여행 일수(1~360일)를 선택해 주세요.');
+ if(typeof inCode!=='string'||typeof outCode!=='string')throw new Error('IN·OUT 도시를 선택해 주세요.');
  const indexes={out:new Map(),back:new Map()};let months=0,latest=0;
  for(const route of [...routes].filter(r=>r.region===region).sort((a,b)=>a.code.localeCompare(b.code))){
   for(const direction of ['out','back'])for(const [month,record] of route.legs[direction]){
+   if(direction==='out'&&inCode&&route.code!==inCode||direction==='back'&&outCode&&route.code!==outCode)continue;
    if(record.carrier!==carrier||month<today.slice(0,7)||month>end.slice(0,7))continue;
    months++;latest=Math.max(latest,record.success??0);
    for(const day of record.dates){
@@ -36,7 +38,7 @@ export function findTrips(routes,{carrier,region,days,today,end}){
   const outgoing=indexes.out.get(date),incoming=indexes.back.get(backDate)??[];
   for(const group of groups){const out=outgoing.filter(x=>x.flags[group.out]),back=incoming.filter(x=>x.flags[group.back]);if(!out.length||!back.length)continue;const count=out.length*back.length;group.blocks.push({out,back,start:group.total,count});group.total+=count;}
  }
- return {carrier,region,days,today,end,months,latest,groups};
+ return {carrier,region,days,today,end,inCode,outCode,months,latest,groups};
 }
 
 export function tripPage(group,offset=0,limit=20){
