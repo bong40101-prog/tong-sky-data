@@ -1,3 +1,4 @@
+import {setupTripSearch} from './trip-ui.js?v=162';
 import {setupFeedback} from './feedback.js?v=160';
 import {createSummaryCache} from './view-cache.js?v=157';
 import {createNoticeController} from './notices.js?v=154';
@@ -13,6 +14,7 @@ const filterRoutes=(routes,filter)=>filterRoutesRaw(routes,filter,summarize);
 const $=id=>document.getElementById(id);
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const today=todayKST();
+let tripSearch;const tripRoutesCache=new Map();
 const noticeController=createNoticeController();
 const state={carrier:'KE',origin:'ICN',region:'전체',country:'전체',airport:'전체',query:'',seat:'all',start:today,end:addDays(today,359),month:today.slice(0,7),direction:'out',selected:null,records:[],routes:[],filtered:[],loading:false};
 setupFeedback({getContext:()=>({carrier:state.carrier,origin:state.origin,destination:state.selected??'',month:state.month,direction:state.direction,start:state.start,end:state.end})});
@@ -31,6 +33,14 @@ function status(text,kind=''){const e=$('load-status');e.className='load-status 
 function message(text){$('notice').textContent=text;$('notice').hidden=!text;}
 function formError(text){$('form-error').textContent=text;$('form-error').hidden=!text;}
 function currentRoute(){return state.routes.find(r=>r.code===state.selected);}
+function recommendationData(carrier){
+ const key=carrier+':'+state.origin,cached=cache.get(key),catalog=catalogs?.[carrier];
+ if(!cached||!catalog)return {loading:true,routes:[],catalog};
+ let prepared=tripRoutesCache.get(key);
+ if(prepared?.source!==cached){const records=cached.records.filter(r=>!isExcludedRecord(r,catalog,state.origin));const projected=projectRepeatedMarkerRecords(records,records,catalogs.KE);prepared={source:cached,routes:makeRoutes(limitDisplayRecords(projected,catalogs.KE),catalog,state.origin)};tripRoutesCache.set(key,prepared);}
+ return {routes:prepared.routes,catalog,origin:state.origin,today,end:bookingEnd(),partial:cached.errors.length>0};
+}
+
 function setOptions(){
  $('seat').replaceChildren();const options=state.carrier==='OZ'?['비즈니스 전체','비즈니스 보너스','비즈니스 승급']:['프레스티지·퍼스트 전체','프레스티지 보너스','프레스티지 승급','퍼스트 보너스·승급 합산'];
  for(let i=0;i<options.length;i++){const option=node('option','',options[i]);option.value=i===0?'all':String(i-1);$('seat').append(option);}$('seat').value=state.seat;
@@ -165,7 +175,7 @@ function openDay(date,info){
  if(!info.day?.savedCalendar){flightDetails(info,markers);timetableDayDetails(date,info,markers);}$('day-times').replaceChildren();if(info.record){$('day-times').append(node('p','',`항공사 기준 ${fullTime.format(new Date(info.record.sourceUpdatedAt))}`),node('p','',`실제 수집 ${fullTime.format(info.record.success)}`));}else $('day-times').append(node('p','','저장된 수집 시각 없음'));
  $('day-dialog').showModal();
 }
-function finishData(records,errors){records=records.filter(r=>!isExcludedRecord(r,catalogs[state.carrier],state.origin));const pattern=records.filter(r=>isExtendedKeRoute(r,catalogs.KE)),other=records.filter(r=>!isExtendedKeRoute(r,catalogs.KE)),masked=applyOperationPolicy(other,operationPolicy,{forcePending:Boolean(operationWarning)});const projected=[...pattern,...projectLegacySavedRecords(other,projectTimetableRecords(masked.records,timetableIndex),timetableIndex,{end:bookingEnd()})];repeatRecords=projectRepeatedMarkerRecords(records,projected,catalogs.KE);saveRepeatDecisions();state.records=limitDisplayRecords(repeatRecords,catalogs.KE);state.routes=makeRoutes(state.records,catalogs[state.carrier],state.origin);state.loading=false;status(state.records.length?`저장 ${state.records.length}개 노선·월 연결됨`:'저장된 자료 없음',state.records.length?'ready':'');message([errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 페이지를 새로고침해 다시 확인할 수 있습니다.':'',operationWarning,timetableWarning,masked.warnings.length?'운항 대조 자료가 올바르지 않은 일부 저장 결과는 표시에서 제외했습니다.':''].filter(Boolean).join(' '));stats();renderRoutes();renderCalendar();}
+function finishData(records,errors){records=records.filter(r=>!isExcludedRecord(r,catalogs[state.carrier],state.origin));const pattern=records.filter(r=>isExtendedKeRoute(r,catalogs.KE)),other=records.filter(r=>!isExtendedKeRoute(r,catalogs.KE)),masked=applyOperationPolicy(other,operationPolicy,{forcePending:Boolean(operationWarning)});const projected=[...pattern,...projectLegacySavedRecords(other,projectTimetableRecords(masked.records,timetableIndex),timetableIndex,{end:bookingEnd()})];repeatRecords=projectRepeatedMarkerRecords(records,projected,catalogs.KE);saveRepeatDecisions();state.records=limitDisplayRecords(repeatRecords,catalogs.KE);state.routes=makeRoutes(state.records,catalogs[state.carrier],state.origin);state.loading=false;status(state.records.length?`저장 ${state.records.length}개 노선·월 연결됨`:'저장된 자료 없음',state.records.length?'ready':'');message([errors.length?'일부 자료를 불러오지 못했습니다. 표시된 자료는 유지되며, 페이지를 새로고침해 다시 확인할 수 있습니다.':'',operationWarning,timetableWarning,masked.warnings.length?'운항 대조 자료가 올바르지 않은 일부 저장 결과는 표시에서 제외했습니다.':''].filter(Boolean).join(' '));stats();renderRoutes();renderCalendar();tripSearch?.refresh();}
 export async function loadData(force=false){
  const id=++generation;controller?.abort();controller=new AbortController();const own=controller,carrier=state.carrier,origin=state.origin,key=`${carrier}:${origin}`;state.loading=true;state.selected=null;state.records=[];state.routes=[];message('');status('저장 자료 불러오는 중');stats();renderRoutes();renderCalendar();
  const cached=cache.get(key);if(!force&&cached&&Date.now()-cached.at<60000){finishData(cached.records,cached.errors);return;}
@@ -193,6 +203,7 @@ async function selectCarrier(carrier){if(state.carrier===carrier)return;state.ca
  for(const button of document.querySelectorAll('[data-carrier]')){const active=button.dataset.carrier===carrier;button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;}
  state.end=bookingEnd();setDateLimits();$('end').value=state.end;if(state.start>state.end){state.start=today;$('start').value=today;}setOptions();setMonths();await loadData();}
 async function init(){
+ tripSearch=setupTripSearch({getData:recommendationData});
  // Official lookup is independent of the saved KE/OZ dataset and never starts collection.
  $('repeat-audit-download').addEventListener('click',downloadRepeatDecisions);
  $('boot-retry').addEventListener('click',()=>catalogs?bootDatasets(true):location.reload());$('boot-continue').addEventListener('click',()=>revealMain());
