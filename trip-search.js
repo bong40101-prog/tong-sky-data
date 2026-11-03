@@ -1,5 +1,6 @@
-import {REGIONS,addDays,validDate,cellInfo} from './model.js?v=159';
+import {addDays,validDate,cellInfo} from './model.js?v=159';
 
+export const TRIP_REGIONS=['유럽','미주'];
 export const TRIP_TYPES=[
  {id:'award-award',label:'보너스 왕복',out:'prestigeAward',back:'prestigeAward'},
  {id:'award-upgrade',label:'보너스＋승급',out:'prestigeAward',back:'prestigeUpgrade'},
@@ -9,7 +10,7 @@ export const TRIP_TYPES=[
 // Index each direction by date once. Keep Cartesian products as blocks instead
 // of allocating every city pair; counts and pagination include all matches.
 export function findTrips(routes,{carrier,region,days,today,end}){
- if(!['KE','OZ'].includes(carrier)||!REGIONS.includes(region)||!Number.isInteger(days)||days<1||days>360||!validDate(today)||!validDate(end)||today>end)throw new Error('지역과 여행 일수(1~360일)를 선택해 주세요.');
+ if(!['KE','OZ'].includes(carrier)||!TRIP_REGIONS.includes(region)||!Number.isInteger(days)||days<1||days>360||!validDate(today)||!validDate(end)||today>end)throw new Error('지역과 여행 일수(1~360일)를 선택해 주세요.');
  const indexes={out:new Map(),back:new Map()};let months=0,latest=0;
  for(const route of [...routes].filter(r=>r.region===region).sort((a,b)=>a.code.localeCompare(b.code))){
   for(const direction of ['out','back'])for(const [month,record] of route.legs[direction]){

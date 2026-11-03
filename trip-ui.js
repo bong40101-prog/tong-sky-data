@@ -1,5 +1,5 @@
-import {AIRLINES,REGIONS} from './model.js?v=159';
-import {findTrips,tripPage} from './trip-search.js?v=162';
+import {AIRLINES} from './model.js?v=159';
+import {findTrips,tripPage,TRIP_REGIONS} from './trip-search.js?v=163';
 
 export function setupTripSearch({getData,document:doc=document}){
  const $=id=>doc.getElementById(id),dialog=$('trip-dialog');let carrier='KE',lastFocus=null;
@@ -33,7 +33,7 @@ export function setupTripSearch({getData,document:doc=document}){
    }
   }catch(e){$('trip-status').textContent=e.message||'추천 일정을 불러오지 못했습니다.';}
  }
- function open(selected,button){carrier=selected;lastFocus=button;dialog.dataset.tripCarrier=carrier;$('trip-title').textContent=AIRLINES[carrier].name+' 추천일정';const data=getData(carrier),before=$('trip-region').value;const options=REGIONS.filter(r=>data.catalog?.regions?.[r]?.length);$('trip-region').replaceChildren(...options.map(r=>{const o=el('option','',r);o.value=r;return o;}));$('trip-region').value=options.includes(before)?before:options.includes('유럽')?'유럽':options[0]??'';dialog.showModal();search();}
+ function open(selected,button){carrier=selected;lastFocus=button;dialog.dataset.tripCarrier=carrier;$('trip-title').textContent=AIRLINES[carrier].name+' 추천일정';const data=getData(carrier),before=$('trip-region').value;const options=TRIP_REGIONS.filter(r=>data.catalog?.regions?.[r]?.length);$('trip-region').replaceChildren(...options.map(r=>{const o=el('option','',r);o.value=r;return o;}));$('trip-region').value=options.includes(before)?before:options.includes('유럽')?'유럽':options[0]??'';dialog.showModal();search();}
  for(const [id,code] of [['recommend-ke','KE'],['recommend-oz','OZ']])$(id).addEventListener('click',e=>open(code,e.currentTarget));
  $('trip-form').addEventListener('submit',e=>{e.preventDefault();search();});$('trip-region').addEventListener('change',search);$('trip-days').addEventListener('change',search);
  $('trip-close').addEventListener('click',()=>dialog.close());dialog.addEventListener('close',()=>lastFocus?.focus());
