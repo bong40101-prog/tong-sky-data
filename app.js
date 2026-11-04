@@ -1,4 +1,5 @@
 import {setupTripSearch} from './trip-ui.js?v=165';
+import {bootRegionSteps,createBootProgress} from './boot-progress.js?v=166';
 import {setupFeedback} from './feedback.js?v=160';
 import {createSummaryCache} from './view-cache.js?v=157';
 import {createNoticeController} from './notices.js?v=154';
@@ -183,16 +184,26 @@ export async function loadData(force=false){
  try{const data=await loadSavedDataset({catalogs,carriers:[carrier],origin,signal:own.signal,force,onProgress:p=>{if(id===generation)status(`${AIRLINES[p.source.carrier].name} · ${p.source.region} · ${p.completed}/${p.total}구간`);}});if(id===generation){const result=retainUnavailableRegions(data.results[carrier],cached?.records);cache.set(key,{...result,at:Date.now()});finishData(result.records,result.errors);}}
  catch{if(id===generation)finishData(cached?.records??[],['저장 자료 연결 실패']);}finally{clearTimeout(timer);}
 }
-async function revealMain(){await loadData();$('boot-screen').hidden=true;$('app-screen').hidden=false;noticeController.show();}
+const paintBoot=()=>new Promise(resolve=>{const view=document.defaultView;if(view?.requestAnimationFrame&&!document.hidden)view.requestAnimationFrame(()=>view.requestAnimationFrame(resolve));else setTimeout(resolve,0);});
+async function revealMain({complete=false,total=0,isCurrent=()=>true}={}){
+ $('boot-stage').textContent='노선·달력 화면 준비 중';
+ if(complete){$('boot-progress').value=95;$('boot-percent').textContent='95%';$('boot-detail').textContent=`${total}개 노선·월 · 달력과 노선 목록을 준비합니다.`;}
+ await paintBoot();if(!isCurrent())return;
+ await loadData();if(!isCurrent())return;
+ if(complete){$('boot-progress').value=100;$('boot-percent').textContent='100%';$('boot-stage').textContent='저장 자료 불러오기 완료';$('boot-detail').textContent=`${total}개 노선·월 · 메인 화면으로 이동합니다.`;await paintBoot();}
+ if(!isCurrent())return;$('boot-screen').hidden=true;$('app-screen').hidden=false;noticeController.show();
+}
 async function bootDatasets(force=false){
  const attempt=++bootAttempt;controller?.abort();controller=new AbortController();const own=controller;$('boot-actions').hidden=true;$('boot-progress').value=0;$('boot-percent').textContent='0%';$('boot-stage').textContent='저장 자료 연결 중';$('boot-detail').textContent='대한항공 · 아시아나 달력을 준비합니다.';
+ const progress=createBootProgress({steps:bootRegionSteps(catalogs),isCurrent:()=>attempt===bootAttempt,onUpdate:p=>{$('boot-progress').value=p.percent;$('boot-percent').textContent=p.percent+'%';$('boot-stage').textContent=AIRLINES[p.source.carrier].name+' · '+p.source.region+' 완료';$('boot-detail').textContent=`${p.completed}/${p.total}개 지역 확인 완료${p.recordCount!==undefined?' · 현재 지역 '+p.recordCount+'개 노선·월':''}`;}});
  const timer=setTimeout(()=>own.abort(new Error('연결 시간 초과')),25000);
- try{const data=await loadSavedDataset({catalogs,carriers:['KE','OZ'],origin:state.origin,signal:own.signal,force,onProgress:p=>{if(attempt!==bootAttempt)return;const percent=Math.min(99,Math.floor(p.completed*100/p.total));$('boot-progress').value=percent;$('boot-percent').textContent=percent+'%';$('boot-stage').textContent=AIRLINES[p.source.carrier].name+' · '+p.source.region;$('boot-detail').textContent=`${p.completed}/${p.total}개 구간 처리 완료${p.recordCount!==undefined?' · 현재 지역 '+p.recordCount+'개 노선·월':''}`;}});
+ try{const data=await loadSavedDataset({catalogs,carriers:['KE','OZ'],origin:state.origin,signal:own.signal,force,onProgress:p=>progress.report(p)});
+  clearTimeout(timer);await progress.flush();
   if(attempt!==bootAttempt)return;
   for(const [carrier,result] of Object.entries(data.results)){const key=`${carrier}:${state.origin}`,merged=retainUnavailableRegions(result,cache.get(key)?.records);data.results[carrier]=merged;cache.set(key,{...merged,at:Date.now()});}
   const total=Object.values(data.results).reduce((n,r)=>n+limitDisplayRecords(r.records,catalogs.KE).length,0),failed=Object.values(data.results).some(r=>r.errors.length>0)||Boolean(operationWarning);
   if(failed){$('boot-stage').textContent=operationWarning?'운항 대조 자료 연결을 확인하지 못했습니다.':'일부 자료 연결을 확인하지 못했습니다.';$('boot-detail').textContent=`불러온 ${total}개 노선·월은 유지됩니다. 다시 시도하거나 불러온 자료로 볼 수 있습니다.`;$('boot-actions').hidden=false;}
-  else{$('boot-progress').value=100;$('boot-percent').textContent='100%';$('boot-stage').textContent='저장 자료 불러오기 완료';$('boot-detail').textContent=`${total}개 노선·월 · 메인 화면으로 이동합니다.`;await revealMain();}
+  else{await revealMain({complete:true,total,isCurrent:()=>attempt===bootAttempt});}
  }catch{$('boot-stage').textContent='저장 자료에 연결하지 못했습니다.';$('boot-detail').textContent='인터넷 연결 후 다시 불러오기를 눌러주세요.';$('boot-actions').hidden=false;}finally{clearTimeout(timer);}
 }
 function readForm({load=true}={}){
