@@ -1,4 +1,4 @@
-import {setupTripSearch} from './trip-ui.js?v=164';
+import {setupTripSearch} from './trip-ui.js?v=165';
 import {setupFeedback} from './feedback.js?v=160';
 import {createSummaryCache} from './view-cache.js?v=157';
 import {createNoticeController} from './notices.js?v=154';

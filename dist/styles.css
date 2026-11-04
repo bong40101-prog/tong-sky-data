@@ -124,3 +124,15 @@ body[data-carrier="OZ"] .month-type-counts{grid-template-columns:repeat(2,minmax
 .trip-form{display:grid;grid-template-columns:minmax(120px,1fr) 90px minmax(150px,1.15fr) minmax(150px,1.15fr) auto;gap:12px}.trip-form select{width:100%;min-width:0;text-overflow:ellipsis}.trip-days-wrap input{width:100%;min-width:0}.trip-submit{white-space:nowrap}
 @media(max-width:1000px){.trip-form{grid-template-columns:repeat(2,minmax(0,1fr))}.trip-submit{grid-column:1 / -1}}
 @media(max-width:480px){.trip-form{gap:12px}.trip-form select,.trip-days-wrap{font-size:13px;padding:9px 8px}}
+
+/* Keep recommendation controls visible while only the results scroll. */
+.trip-dialog{--trip-padding:28px;padding:0;overflow:hidden}
+.trip-dialog[open]{display:flex;flex-direction:column}
+.trip-controls{flex:none;padding:var(--trip-padding) var(--trip-padding) 16px;background:#f8fafc;border-bottom:1px solid #e0e7ee}
+.trip-controls .trip-form{margin:18px 0 0}
+.trip-scroll{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 var(--trip-padding) var(--trip-padding);scrollbar-width:thin;scrollbar-color:#c7d4df transparent}
+.trip-scroll:focus-visible{outline:2px solid #79a9c9;outline-offset:-3px}
+@media(max-width:900px){.trip-dialog{--trip-padding:20px}}
+@media(max-width:480px){.trip-dialog{--trip-padding:16px}.trip-controls{padding-bottom:12px}}
+@media(max-height:600px){.trip-dialog{--trip-padding:12px}.trip-heading .eyebrow{display:none}.trip-heading h2{font-size:20px}.trip-heading #trip-context{margin-top:5px;font-size:11px}.trip-heading>button{width:36px;height:36px}.trip-controls{padding-bottom:10px}.trip-controls .trip-form{margin-top:12px;padding:10px;gap:8px}.trip-form label{gap:4px;font-size:11px}.trip-form select,.trip-days-wrap{min-height:36px;padding:6px 8px}.trip-submit{min-height:36px;padding:8px 12px;font-size:12px}}
+@media(min-width:600px) and (max-width:1000px) and (max-height:540px){.trip-form{grid-template-columns:minmax(110px,.8fr) minmax(65px,.45fr) repeat(2,minmax(120px,1fr))}.trip-submit{grid-column:1 / -1}}
