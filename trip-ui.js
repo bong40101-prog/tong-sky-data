@@ -12,7 +12,7 @@ export function setupTripSearch({getData,document:doc=document}){
   for(const id of ['trip-in','trip-out']){const select=$(id),before=select.value,all=el('option','','선택 안 함 · 전체');all.value='';select.replaceChildren(all,...choices.map(c=>{const option=el('option','',`${c.name} · ${c.code}`);option.value=c.code;return option;}));select.value=choices.some(c=>c.code===before)?before:'';}
  }
  function search(){
-  const target=$('trip-results');target.replaceChildren();$('trip-status').textContent='';
+  const target=$('trip-results');target.replaceChildren();$('trip-status').textContent='';$('trip-scroll').scrollTop=0;
   try{
    const data=getData(carrier),region=$('trip-region').value,days=Number($('trip-days').value);
    if(data.loading){$('trip-status').textContent='저장 자료를 불러오는 중입니다.';return;}
