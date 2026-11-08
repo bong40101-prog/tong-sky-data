@@ -15,7 +15,7 @@
 .blog-post-link time{display:block;margin-top:6px;font-size:10px;color:#7c8e9d}
 .blog-feed-status{margin:10px 0 0;font-size:11px;color:#788c9b;line-height:1.7}
 @media(min-width:1440px){.site-shell{max-width:1584px}.page-columns{display:grid;grid-template-columns:minmax(0,1fr) 264px;gap:24px;align-items:start}.blog-sidebar{position:sticky;top:24px;margin:32px 0 0;max-height:calc(100vh - 48px);overflow-y:auto;scrollbar-width:thin;padding:23px 20px}}
-@media(max-width:760px){.blog-sidebar{margin:20px 0;padding:22px}.blog-sidebar h2{font-size:19px}.blog-post-title{font-size:13px}}
+@media(max-width:760px){.blog-sidebar{margin:0;padding:22px}.blog-sidebar h2{font-size:19px}.blog-post-title{font-size:13px}.blog-posts>li~li{display:none}}
 
 .blog-promo{margin:20px -4px 0;padding:18px 14px;border:1px solid #e1e5f0;border-radius:12px;background:#f6f7fc}
 .blog-promo h3{margin:0;font-size:14px;line-height:1.75;color:#263f61;word-break:keep-all}

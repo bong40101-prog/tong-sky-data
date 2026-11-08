@@ -25,6 +25,12 @@ async function loadPosts(){
  finally{clearTimeout(timer);}
 }
 if(root){
+ // Reuse one sidebar so links, feed state and keyboard order match its visible position.
+ const desktopAnchor=document.createComment('developer-blog-desktop');root.before(desktopAnchor);
+ const calendar=document.querySelector('.results-layout > .calendar-panel');
+ const mobile=window.matchMedia('(max-width:760px)');
+ const placeSidebar=()=>{if(mobile.matches&&calendar)calendar.before(root);else desktopAnchor.after(root);};
+ placeSidebar();mobile.addEventListener('change',placeSidebar);
  // Start after the calendar's boot screen is gone; this never participates in its progress or error state.
  const screen=document.getElementById('app-screen');
  if(!screen?.hidden)void loadPosts();
