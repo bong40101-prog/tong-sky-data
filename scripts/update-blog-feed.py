@@ -38,7 +38,7 @@ def parse_feed(data):
     if not posts:
         raise ValueError('No valid blog posts; retain previous file')
     posts.sort(key=lambda p:p['publishedAt'], reverse=True)
-    return {'schema':1, 'blogUrl':BLOG, 'blogName':channel.findtext('title') or '', 'posts':posts[:8]}
+    return {'schema':1, 'blogUrl':BLOG, 'blogName':channel.findtext('title') or '', 'posts':posts[:4]}
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--input',type=pathlib.Path)
