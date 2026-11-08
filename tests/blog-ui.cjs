@@ -25,13 +25,17 @@ const results=[];
    await page.goto('http://127.0.0.1:8148/');
    await page.locator('#app-screen').waitFor({state:'visible'});
    for(const dialog of await page.locator('.announcement-dialog[open]').all())await dialog.locator('.notice-close').click();
-   await page.waitForFunction(()=>document.querySelectorAll('.blog-post-link').length===4);
+   await page.waitForFunction(()=>document.querySelectorAll('.blog-post-link').length===3);
    const geometry=await page.evaluate(()=>{const a=document.querySelector('.calendar-content').getBoundingClientRect(),b=document.getElementById('developer-blog').getBoundingClientRect();return {main:{x:a.x,y:a.y,width:a.width,bottom:a.bottom},blog:{x:b.x,y:b.y,width:b.width},pageWidth:document.documentElement.scrollWidth,viewport:innerWidth,routeCount:document.getElementById('route-count').textContent};});
    assert(geometry.pageWidth<=width+1,'horizontal overflow');
    if(width>=1440)assert(geometry.blog.x>=geometry.main.x+geometry.main.width,'blog must be on right');
    else assert(geometry.blog.y>=geometry.main.bottom,'blog must follow calendar on narrow screens');
    assert(Number(geometry.routeCount)>0,'calendar routes loaded');
    assert.equal(await page.locator('.blog-post-link').first().getAttribute('href'),'https://blog.naver.com/mkj2449/224469201430');
+   assert.equal(await page.locator('.blog-promo-link').getAttribute('href'),'https://pickle.com/i/K2GRZDJQPSKY');
+   assert.equal(await page.locator('.blog-promo-link').getAttribute('target'),'_blank');
+   const promoBelow=await page.evaluate(()=>document.querySelector('.blog-promo').getBoundingClientRect().top>=document.querySelector('.blog-posts').getBoundingClientRect().bottom);
+   assert(promoBelow,'Pickle promotion must follow blog posts');
    const oldMonth=await page.locator('#month').inputValue();await page.locator('#next-month').click();assert.notEqual(await page.locator('#month').inputValue(),oldMonth);
    await page.locator('#recommend-ke').click();assert(await page.locator('#trip-dialog').isVisible());await page.locator('#trip-close').click();
    await page.screenshot({path:path.join(evidence,`homepage-${width}.png`),fullPage:true});
@@ -41,7 +45,7 @@ const results=[];
    await page.waitForFunction(()=>document.querySelector('[data-blog-status]').textContent.includes('불러오지 못했어요'));
    assert(await page.locator('#calendar-grid').isVisible(),'blog error must not hide calendar');
    assert.equal(errors.length,0,errors.join('\n'));
-   results.push({width,height,geometry,posts:4,calendarMonthChange:true,recommendationDialog:true,feedFailureIsolated:true,errors});await page.close();
+   results.push({width,height,geometry,posts:3,calendarMonthChange:true,recommendationDialog:true,feedFailureIsolated:true,errors});await page.close();
   }
   fs.writeFileSync(path.join(evidence,'results.json'),JSON.stringify({passed:true,results},null,2));console.log(JSON.stringify({passed:true,viewports:results.length}));
  }finally{if(browser)await browser.close();server.kill();}
