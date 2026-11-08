@@ -11,7 +11,7 @@ async function loadPosts(){
   const feed=await response.json();
   if(feed.schema!==1||feed.blogUrl!==BLOG||!Array.isArray(feed.posts))throw Error('Invalid feed');
   const fragment=document.createDocumentFragment();let count=0;
-  for(const post of feed.posts.slice(0,8)){
+  for(const post of feed.posts.slice(0,4)){
    const url=allowedPost(post.url);if(!url||typeof post.title!=='string'||!post.title.trim())continue;
    const li=document.createElement('li'),a=document.createElement('a'),title=document.createElement('span');
    a.className='blog-post-link';a.href=url;a.target='_blank';a.rel='noopener noreferrer';
