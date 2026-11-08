@@ -14,4 +14,4 @@
 .pickle-inline-promo h2{font-size:13px}
 .pickle-inline-promo .blog-visit{background:var(--blog-accent);color:#fff;margin-bottom:0}
 @media(min-width:1440px){.site-shell{max-width:1584px}.page-columns{display:grid;grid-template-columns:minmax(0,1fr) 264px;gap:24px;align-items:start}.blog-sidebar{position:sticky;top:16px;margin:32px 0 0}.naver-sidebar-inner{max-height:calc(100vh - 32px);overflow-y:auto;scrollbar-width:thin}}
-@media(max-width:760px){.blog-sidebar{margin:0}}
+@media(max-width:760px){.blog-sidebar{margin:0}#naver-blog-frame{display:none}}
