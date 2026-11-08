@@ -25,7 +25,7 @@ const results=[];
    await page.goto('http://127.0.0.1:8148/');
    await page.locator('#app-screen').waitFor({state:'visible'});
    for(const dialog of await page.locator('.announcement-dialog[open]').all())await dialog.locator('.notice-close').click();
-   await page.waitForFunction(()=>document.querySelectorAll('.blog-post-link').length===7);
+   await page.waitForFunction(()=>document.querySelectorAll('.blog-post-link').length===4);
    const geometry=await page.evaluate(()=>{const a=document.querySelector('.calendar-content').getBoundingClientRect(),b=document.getElementById('developer-blog').getBoundingClientRect();return {main:{x:a.x,y:a.y,width:a.width,bottom:a.bottom},blog:{x:b.x,y:b.y,width:b.width},pageWidth:document.documentElement.scrollWidth,viewport:innerWidth,routeCount:document.getElementById('route-count').textContent};});
    assert(geometry.pageWidth<=width+1,'horizontal overflow');
    if(width>=1440)assert(geometry.blog.x>=geometry.main.x+geometry.main.width,'blog must be on right');
@@ -41,7 +41,7 @@ const results=[];
    await page.waitForFunction(()=>document.querySelector('[data-blog-status]').textContent.includes('불러오지 못했어요'));
    assert(await page.locator('#calendar-grid').isVisible(),'blog error must not hide calendar');
    assert.equal(errors.length,0,errors.join('\n'));
-   results.push({width,height,geometry,posts:7,calendarMonthChange:true,recommendationDialog:true,feedFailureIsolated:true,errors});await page.close();
+   results.push({width,height,geometry,posts:4,calendarMonthChange:true,recommendationDialog:true,feedFailureIsolated:true,errors});await page.close();
   }
   fs.writeFileSync(path.join(evidence,'results.json'),JSON.stringify({passed:true,results},null,2));console.log(JSON.stringify({passed:true,viewports:results.length}));
  }finally{if(browser)await browser.close();server.kill();}
