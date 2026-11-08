@@ -14,13 +14,16 @@
         "blog": {
           "x": 1360,
           "y": 134,
-          "width": 264
+          "width": 264,
+          "bottom": 954.8125
         },
+        "routesBottom": 1391.265625,
+        "calendarTop": 614.6875,
         "pageWidth": 1728,
         "viewport": 1728,
         "routeCount": "13"
       },
-      "posts": 4,
+      "visiblePosts": 3,
       "calendarMonthChange": true,
       "recommendationDialog": true,
       "feedFailureIsolated": true,
@@ -39,13 +42,16 @@
         "blog": {
           "x": 1144,
           "y": 134,
-          "width": 264
+          "width": 264,
+          "bottom": 954.8125
         },
+        "routesBottom": 1385.265625,
+        "calendarTop": 608.6875,
         "pageWidth": 1440,
         "viewport": 1440,
         "routeCount": "13"
       },
-      "posts": 4,
+      "visiblePosts": 3,
       "calendarMonthChange": true,
       "recommendationDialog": true,
       "feedFailureIsolated": true,
@@ -64,13 +70,100 @@
         "blog": {
           "x": 60,
           "y": 1872.84375,
-          "width": 1160
+          "width": 1160,
+          "bottom": 2542.75
         },
+        "routesBottom": 1385.265625,
+        "calendarTop": 608.6875,
         "pageWidth": 1280,
         "viewport": 1280,
         "routeCount": "13"
       },
-      "posts": 4,
+      "visiblePosts": 3,
+      "calendarMonthChange": true,
+      "recommendationDialog": true,
+      "feedFailureIsolated": true,
+      "errors": []
+    },
+    {
+      "width": 761,
+      "height": 900,
+      "geometry": {
+        "main": {
+          "x": 23,
+          "y": 102,
+          "width": 715,
+          "bottom": 1934.640625
+        },
+        "blog": {
+          "x": 23,
+          "y": 1984.640625,
+          "width": 715,
+          "bottom": 2654.546875
+        },
+        "routesBottom": 1486.65625,
+        "calendarTop": 672.6875,
+        "pageWidth": 761,
+        "viewport": 761,
+        "routeCount": "13"
+      },
+      "visiblePosts": 3,
+      "calendarMonthChange": true,
+      "recommendationDialog": true,
+      "feedFailureIsolated": true,
+      "errors": []
+    },
+    {
+      "width": 760,
+      "height": 900,
+      "geometry": {
+        "main": {
+          "x": 18,
+          "y": 96,
+          "width": 724,
+          "bottom": 3085.765625
+        },
+        "blog": {
+          "x": 18,
+          "y": 1381.171875,
+          "width": 724,
+          "bottom": 1913.5
+        },
+        "routesBottom": 1364.171875,
+        "calendarTop": 1930.5,
+        "pageWidth": 760,
+        "viewport": 760,
+        "routeCount": "13"
+      },
+      "visiblePosts": 1,
+      "calendarMonthChange": true,
+      "recommendationDialog": true,
+      "feedFailureIsolated": true,
+      "errors": []
+    },
+    {
+      "width": 420,
+      "height": 850,
+      "geometry": {
+        "main": {
+          "x": 18,
+          "y": 96,
+          "width": 384,
+          "bottom": 3200
+        },
+        "blog": {
+          "x": 18,
+          "y": 1417.171875,
+          "width": 384,
+          "bottom": 1995.640625
+        },
+        "routesBottom": 1400.171875,
+        "calendarTop": 2012.640625,
+        "pageWidth": 420,
+        "viewport": 420,
+        "routeCount": "13"
+      },
+      "visiblePosts": 1,
       "calendarMonthChange": true,
       "recommendationDialog": true,
       "feedFailureIsolated": true,
@@ -84,18 +177,21 @@
           "x": 18,
           "y": 96,
           "width": 354,
-          "bottom": 2621.625
+          "bottom": 3217.09375
         },
         "blog": {
           "x": 18,
-          "y": 2649.625,
-          "width": 354
+          "y": 1417.171875,
+          "width": 354,
+          "bottom": 1995.640625
         },
+        "routesBottom": 1400.171875,
+        "calendarTop": 2012.640625,
         "pageWidth": 390,
         "viewport": 390,
         "routeCount": "13"
       },
-      "posts": 4,
+      "visiblePosts": 1,
       "calendarMonthChange": true,
       "recommendationDialog": true,
       "feedFailureIsolated": true,

@@ -1,21 +1,41 @@
 {
   "date": "2026-11-08",
   "blogAccount": "mkj2449",
-  "posts": 4,
+  "posts": 3,
+  "mobilePosts": 1,
+  "mobileBreakpoint": 760,
+  "mobilePlacement": "Between the complete route list panel and calendar panel",
+  "desktopPlacement": "Right sidebar at widths of at least 1440px",
   "refreshCronUTC": "23 */6 * * *",
-  "websiteCommit": "9b64018ede3d663c60044866523fa16f46c6dfee",
-  "sourceCommit": "037ce273443fe93d85a0650051bc67c3f8b48bfb",
-  "rssWorkflowCommit": "2197aa8e003ba4917910e76c5968f729aaadd6e1",
+  "websiteCommit": "3cf997cd04affea7b60597fbd213f59f9e52b9e0",
+  "sourceCommit": "181920b784f66b59ca7d5089a9909356355b1040",
+  "rssWorkflowCommit": "472b5f9f4f908ce51e0894f56cc90968b0c5e038",
   "seriesShortcutCommit": "9468b4d973d61f0e119dee6e7a358a7472bea5a4",
   "dataBranchUnchanged": "ed48b041577684c6d0b9c8fa58755521333b5728",
   "checks": {
-    "uiRun": 42466898198,
-    "pagesRun": 42467000864,
-    "rssRun": 42467003813,
+    "uiRun": 42468377492,
+    "pagesRun": 42468380529,
+    "rssRun": 42468219622,
     "status": "success",
-    "livePostCount": 4,
-    "shortcutClicked": true
+    "viewports": [
+      390,
+      420,
+      760,
+      761,
+      1280,
+      1440,
+      1728
+    ],
+    "liveSourceMatchesTestedFiles": true,
+    "liveFeedPostCount": 3,
+    "resizeWithoutDuplicateSidebar": true,
+    "calendarNavigationAndRecommendations": true
   },
+  "pickleLink": "https://pickle.com/i/K2GRZDJQPSKY",
+  "pickleCopy": [
+    "쿠팡 리뷰 대행 & 선착순 세일쿠폰 자동 수집",
+    "네이버 후기 자동 입력 및 표 자동구입"
+  ],
   "apkChanged": false,
   "airlineCollectorChanged": false
 }
