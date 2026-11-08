@@ -8,7 +8,9 @@
 .blog-sidebar .blog-visit{display:flex;justify-content:space-between;align-items:center;gap:8px;text-decoration:none;padding:13px 14px;background:var(--blog-green-bg);color:var(--blog-green);border-radius:10px;font-size:12px;font-weight:700;margin:0 0 16px;min-height:44px}
 .blog-sidebar a:focus-visible{outline:3px solid #247cb3;outline-offset:3px}
 .blog-sidebar .blog-visit:hover{filter:brightness(.96)}
-.pickle-inline-promo{border:1px solid var(--blog-border);border-radius:12px;background:var(--blog-bg3);padding:13px;margin-top:18px}
+.pickle-inline-promo{padding:0;margin-top:18px}
+.pickle-features{margin:0 0 16px;padding-left:18px;font-size:12px;line-height:1.8;color:var(--blog-text2);word-break:keep-all;overflow-wrap:anywhere}
+.pickle-features li+li{margin-top:8px}
 .pickle-inline-promo h2{font-size:13px}
 .pickle-inline-promo .blog-visit{background:var(--blog-accent);color:#fff;margin-bottom:0}
 @media(min-width:1440px){.site-shell{max-width:1584px}.page-columns{display:grid;grid-template-columns:minmax(0,1fr) 264px;gap:24px;align-items:start}.blog-sidebar{position:sticky;top:16px;margin:32px 0 0}.naver-sidebar-inner{max-height:calc(100vh - 32px);overflow-y:auto;scrollbar-width:thin}}
