@@ -34,7 +34,7 @@ const results=[];
    const visiblePosts=width<=760?1:3;
    assert.equal(await page.locator('.blog-post-link:visible').count(),visiblePosts);
    assert(Number(geometry.routeCount)>0,'calendar routes loaded');
-   assert.equal(await page.locator('.blog-post-link').first().getAttribute('href'),'https://blog.naver.com/mkj2449/224469201430');
+   assert.equal(await page.locator('.blog-post-link').first().getAttribute('href'),JSON.parse(feed).posts[0].url);
    assert.equal(await page.locator('.blog-promo-link').getAttribute('href'),'https://pickle.com/i/K2GRZDJQPSKY');
    assert.equal(await page.locator('.blog-promo-link').getAttribute('target'),'_blank');
    const promoBelow=await page.evaluate(()=>document.querySelector('.blog-promo').getBoundingClientRect().top>=document.querySelector('.blog-posts').getBoundingClientRect().bottom);
