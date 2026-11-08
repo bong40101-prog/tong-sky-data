@@ -11,7 +11,7 @@ async function loadPosts(){
   const feed=await response.json();
   if(feed.schema!==1||feed.blogUrl!==BLOG||!Array.isArray(feed.posts))throw Error('Invalid feed');
   const fragment=document.createDocumentFragment();let count=0;
-  for(const post of feed.posts.slice(0,4)){
+  for(const post of feed.posts.slice(0,3)){
    const url=allowedPost(post.url);if(!url||typeof post.title!=='string'||!post.title.trim())continue;
    const li=document.createElement('li'),a=document.createElement('a'),title=document.createElement('span');
    a.className='blog-post-link';a.href=url;a.target='_blank';a.rel='noopener noreferrer';
@@ -25,6 +25,12 @@ async function loadPosts(){
  finally{clearTimeout(timer);}
 }
 if(root){
+ // Reuse one sidebar so links, feed state and keyboard order match its visible position.
+ const desktopAnchor=document.createComment('developer-blog-desktop');root.before(desktopAnchor);
+ const calendar=document.querySelector('.results-layout > .calendar-panel');
+ const mobile=window.matchMedia('(max-width:760px)');
+ const placeSidebar=()=>{if(mobile.matches&&calendar)calendar.before(root);else desktopAnchor.after(root);};
+ placeSidebar();mobile.addEventListener('change',placeSidebar);
  // Start after the calendar's boot screen is gone; this never participates in its progress or error state.
  const screen=document.getElementById('app-screen');
  if(!screen?.hidden)void loadPosts();
