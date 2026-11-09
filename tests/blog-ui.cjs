@@ -8,13 +8,14 @@ const results=[];
  let browser;
  try{
   for(let i=0;i<50;i++){try{const r=await fetch('http://127.0.0.1:8148/');if(r.ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
-  browser=await chromium.launch({headless:true});
+  browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
   const feed=fs.readFileSync(path.join(root,'dist/blog-feed.json'),'utf8');
   for(const [width,height] of [[1920,1080],[1728,1080],[1440,1000],[1280,900],[761,900],[760,900],[420,850],[390,844],[320,740]]){
    const page=await browser.newPage({viewport:{width,height},locale:'ko-KR'}),errors=[];
    page.on('pageerror',e=>errors.push(e.message));
    await page.addInitScript(()=>{for(const id of ['operator','excluded-region','feedback','recommendations'])localStorage.setItem('tongsky.notice.dismissed.v1.'+id,'1');});
    await page.route('https://korea-futures-cloudflare.pages.dev/**',r=>r.abort());
+   await page.route('https://korea-futures-cloudflare.pages.dev/api/tongsky-blog',r=>r.fulfill({contentType:'application/json',body:feed}));
    await page.route('https://raw.githubusercontent.com/**',route=>{
     const u=new URL(route.request().url());
     if(u.pathname.endsWith('/blog-feed.json'))return route.fulfill({contentType:'application/json',body:feed});
@@ -59,7 +60,12 @@ const results=[];
     assert(await page.locator('.routes-panel + #developer-blog + .calendar-panel').count()===1,'mobile placement restored after resize');
     assert.equal(await page.locator('#developer-blog').count(),1,'never duplicate sidebar');
    }
-   await page.route('https://raw.githubusercontent.com/**/blog-feed.json',r=>r.fulfill({status:503,body:'unavailable'}));
+   await page.route('https://korea-futures-cloudflare.pages.dev/api/tongsky-blog',r=>r.fulfill({status:503,body:'unavailable'}));
+   await page.reload();await page.locator('#app-screen').waitFor({state:'visible'});
+   await page.waitForFunction(()=>document.querySelectorAll('.blog-post-link').length===3);
+   assert.equal(await page.locator('.blog-post-link:visible').count(),visiblePosts);
+   assert((await page.locator('[data-blog-status]').textContent()).includes('저장된 목록'));
+   await page.route('https://raw.githubusercontent.com/**/blog-feed.json*',r=>r.fulfill({status:503,body:'unavailable'}));
    await page.reload();await page.locator('#app-screen').waitFor({state:'visible'});
    await page.waitForFunction(()=>document.querySelector('[data-blog-status]').textContent.includes('불러오지 못했어요'));
    assert(await page.locator('#calendar-grid').isVisible(),'blog error must not hide calendar');

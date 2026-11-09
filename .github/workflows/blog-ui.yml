@@ -2,7 +2,7 @@ name: Blog sidebar layout check
 on:
   push:
     branches: [web-source]
-    paths: ['dist/blog*', 'dist/index.html', 'tests/blog-ui.cjs', '.github/workflows/blog-ui.yml']
+    paths: ['dist/blog*', 'dist/index.html', 'tests/blog-ui.cjs', 'tests/blog-refresh.test.cjs', '.github/workflows/blog-ui.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,8 +17,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - run: npm install --prefix "$RUNNER_TEMP/blog-browser" --no-save --ignore-scripts playwright@1.64.1
+      - run: npm install --prefix "$RUNNER_TEMP/blog-browser" --no-save --ignore-scripts playwright@1.64.1 jsdom@26.1.0
       - run: '"$RUNNER_TEMP/blog-browser/node_modules/.bin/playwright" install --with-deps chromium'
+      - run: node --test tests/blog-refresh.test.cjs
+        env:
+          JSDOM_MODULE: ${{ runner.temp }}/blog-browser/node_modules/jsdom
       - run: node tests/blog-ui.cjs
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/blog-browser/node_modules/playwright
