@@ -13,7 +13,7 @@ const results=[];
   for(const [width,height] of [[1920,1080],[1728,1080],[1440,1000],[1280,900],[761,900],[760,900],[420,850],[390,844],[320,740]]){
    const page=await browser.newPage({viewport:{width,height},locale:'ko-KR'}),errors=[];
    page.on('pageerror',e=>errors.push(e.message));
-   await page.addInitScript(()=>{for(const id of ['operator','excluded-region','feedback','recommendations'])localStorage.setItem('tongsky.notice.dismissed.v1.'+id,'1');});
+   await page.addInitScript(()=>{for(const id of ['asiana-query-limit-20261109','operator','excluded-region','feedback','recommendations'])localStorage.setItem('tongsky.notice.dismissed.v1.'+id,'1');});
    await page.route('https://korea-futures-cloudflare.pages.dev/**',r=>r.abort());
    await page.route('https://korea-futures-cloudflare.pages.dev/api/tongsky-blog',r=>r.fulfill({contentType:'application/json',body:feed}));
    await page.route('https://raw.githubusercontent.com/**',route=>{
@@ -26,8 +26,8 @@ const results=[];
    await page.goto('http://127.0.0.1:8148/');
    await page.locator('#app-screen').waitFor({state:'visible'});
    assert.equal(await page.locator('.announcement-dialog[open]').count(),1);
-   assert(await page.locator('#announcement-asiana-query-limit-20261109').isVisible(),'only the new notice appears after old dismissals');
-   if(width===390||width===1728)await page.locator('#announcement-asiana-query-limit-20261109').screenshot({path:path.join(evidence,`asiana-notice-${width}.png`)});
+   assert(await page.locator('#announcement-daily-route-refresh').isVisible(),'only the new notice appears after old dismissals');
+   if(width===390||width===1728)await page.locator('#announcement-daily-route-refresh').screenshot({path:path.join(evidence,`daily-refresh-notice-${width}.png`)});
    for(const dialog of await page.locator('.announcement-dialog[open]').all())await dialog.locator('.notice-close').click();
    await page.waitForFunction(()=>document.querySelectorAll('.blog-post-link').length===3);
    const geometry=await page.evaluate(()=>{const a=document.querySelector('.calendar-content').getBoundingClientRect(),b=document.getElementById('developer-blog').getBoundingClientRect(),r=document.querySelector('.routes-panel').getBoundingClientRect(),c=document.querySelector('.calendar-panel').getBoundingClientRect();return {main:{x:a.x,y:a.y,width:a.width,bottom:a.bottom},blog:{x:b.x,y:b.y,width:b.width,bottom:b.bottom},routesBottom:r.bottom,calendarTop:c.top,pageWidth:document.documentElement.scrollWidth,viewport:innerWidth,routeCount:document.getElementById('route-count').textContent};});
